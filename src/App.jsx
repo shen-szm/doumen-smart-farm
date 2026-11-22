@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowSquareOut, ArrowUpRight, Broadcast, Bug, Camera, CaretRight, CheckCircle, Circle, Calculator,
-  Cloud, CloudFog, CloudRain, CloudSun, Database, Drop, Gauge, Keyboard, Leaf, MapPin, MapTrifold, PlayCircle, Sun, Thermometer,
+  Cloud, CloudFog, CloudRain, CloudSun, Clock, Database, Drop, Gauge, Keyboard, Leaf, MapPin, MapTrifold, Monitor, PlayCircle, Sun, Thermometer,
   ChartBar, ChartLineDown, ChartLineUp, FileText, Images, MagnifyingGlassMinus, MagnifyingGlassPlus, Plant, Printer, Scan, ShieldCheck, ShieldWarning, VideoCamera, Wind, X,
 } from "@phosphor-icons/react";
 import { FieldMap, villages, PILOT_FIELD } from "./FieldMap.jsx";
@@ -273,7 +273,8 @@ function AgroPanel({ agro, onOpen, onReplay }) {
   </section>;
 }
 
-function Briefing({ alerts, agro, profile }) {
+// 农情简报条目：滚动播报与简报弹层共用同一份内容。
+function briefingItems(alerts, agro, profile) {
   const items = [];
   const official = alerts?.status === "current" ? alerts.alerts : [];
   if (official.length) {
@@ -299,7 +300,23 @@ function Briefing({ alerts, agro, profile }) {
   }
   const term = solarTerm();
   items.push(`农时：${term.name} · ${term.advice}`);
+  return items;
+}
+
+function Briefing({ alerts, agro, profile }) {
+  const items = briefingItems(alerts, agro, profile);
   return <ul className="briefing-list">{items.map((item) => <li key={item}>{item}</li>)}</ul>;
+}
+
+// 底部滚动农情播报：常驻视口底部，点击可打开完整简报。
+function Ticker({ alerts, agro, profile, onOpen }) {
+  const text = briefingItems(alerts, agro, profile).join("　　◆　　");
+  return <footer className="ticker-bar" aria-label="农情播报" title="点击查看完整农情简报" onClick={onOpen}>
+    <span className="ticker-label"><Broadcast size={15} /> 农情播报</span>
+    <div className="ticker-viewport">
+      <div className="ticker-track"><span>{text}</span><span aria-hidden="true">{text}</span></div>
+    </div>
+  </footer>;
 }
 
 function Details({ title, onClose, onBack, children, page, wide = false }) {
@@ -868,7 +885,7 @@ function CropCalendar() {
 }
 
 function ProductionRecords({ onField, onRisk, onWater }) {
-  return <section className="production-records" aria-label="档案内容">
+  return <section id="production" className="production-records" aria-label="档案内容">
     <div className="record-head">
       <button type="button" className="text-button" onClick={onWater}>区域水环境 <CaretRight size={16} /></button>
       <button type="button" className="text-button" onClick={onRisk}>查看农事处置 <CaretRight size={16} /></button>
@@ -1046,6 +1063,24 @@ function relTime(value, now) {
   return minutes < 1 ? "刚刚" : minutes < 60 ? `${minutes} 分钟前` : minutes < 1440 ? `${Math.round(minutes / 60)} 小时前` : `${Math.round(minutes / 1440)} 天前`;
 }
 
+// 主界面数据链路状态条：汇总各数据源的新鲜度，点击进入链路详情。
+function DataLinksBar({ sources, onOpen }) {
+  const now = useNow();
+  const tone = { current: "实时", cached: "缓存快照", archive: "历史存档", unavailable: "暂不可用" };
+  return <footer className="datalinks-bar" aria-label="数据链路自检">
+    <span className="datalinks-label"><Database size={14} /> 数据链路</span>
+    <div className="datalinks-items">
+      {sources.map(({ key, label, status, time }) => <button key={key} type="button" className="datalinks-item" onClick={onOpen}
+        title={`${label} · ${tone[status] ?? "等待数据"}`}>
+        <i className={`datalinks-dot ${status ?? "loading"}`} />
+        <span>{label}</span>
+        <small>{relTime(time, now)}</small>
+      </button>)}
+    </div>
+    <button type="button" className="text-button" onClick={onOpen}>链路详情 <CaretRight size={13} /></button>
+  </footer>;
+}
+
 function DataLinksDetails({ sources }) {
   const now = useNow();
   return <>
@@ -1199,7 +1234,7 @@ function PlotDetails({ profile, ndvi, onSoil, onField, onReplay }) {
 
 // ============ 键盘快捷键 ============
 const SHORTCUTS = [
-  ["1", "回到农情总览"], ["2", "预警值守"], ["3", "灌溉回放"], ["4", "打开生产档案"],
+  ["1", "回到农情总览"], ["2", "预警值守"], ["3", "灌溉回放"], ["4", "定位生产档案"],
   ["R", "生成农情日报"], ["D", "数据链路自检"], ["F", "全屏 / 退出全屏"], ["?", "本帮助"], ["Esc", "关闭当前弹层"],
 ];
 function ShortcutsHelp() {
@@ -1229,6 +1264,11 @@ export function App() {
   const risk = rainRisk(weather);
   const open = (type, options) => setViews((previous) => [...previous, { type, ...options }]);
   const close = () => setViews([]);
+  // 生产档案内联在主界面下方，导航与快捷键直接滚动定位。
+  const scrollToProduction = () => {
+    close();
+    document.getElementById("production")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   const openAlert = (alert, archived = false) => open("alert", { alert, archived });
   const openArchive = (color) => open("archive", { color });
   const openField = (photoId) => open("field", { photoId });
@@ -1242,7 +1282,7 @@ export function App() {
     ndvi: "苗情长势（NDVI）", agro: "蒸散与灌溉决策", risk: "预警值守与农事处置", storm: "台风「桦加沙」", field: "斗门田间影像档案", replay: "番茄田实测回放",
     map: "卫星底图与调研点位", archive: "斗门官方预警档案", alert: view?.archived ? "历史预警详情" : "在效预警详情",
     plot: PILOT_FIELD.name, links: "数据链路自检", help: "键盘快捷键", lamp: "虫情测报灯 · 部署方案",
-    report: "农情日报", production: "斗门生产档案", briefing: "农情简报", rainfall: "斗门镇暴雨实测记录",
+    report: "农情日报", briefing: "农情简报", rainfall: "斗门镇暴雨实测记录",
     actions: "农事处置", water: "斗门区域水环境", image: view?.image?.title };
   const dataLinks = [
     { key: "obs", label: "斗门站实况", role: "中国天气网 · 站点 101280702", status: observations?.status, time: observations?.current?.time, fetchedAt: observations?.fetchedAt, cycle: "10 分钟" },
@@ -1270,7 +1310,7 @@ export function App() {
       if (key === "1") { setViews([]); window.scrollTo({ top: 0 }); }
       else if (key === "2") setViews([{ type: "risk" }]);
       else if (key === "3") setViews([{ type: "replay" }]);
-      else if (key === "4") setViews([{ type: "production" }]);
+      else if (key === "4") scrollToProduction();
       else if (key === "r") setViews([{ type: "report" }]);
       else if (key === "d") setViews([{ type: "links" }]);
       else if (key === "f") toggleFullscreen();
@@ -1294,7 +1334,7 @@ export function App() {
         <div><strong>斗门智慧农田</strong><small>珠海 · 斗门区</small></div>
       </div>
       <nav className="top-nav" aria-label="大屏导航">
-        <button type="button" className={!["replay", "production", ...riskPages].includes(activePage) ? "active" : ""} onClick={() => {
+        <button type="button" className={!["replay", ...riskPages].includes(activePage) ? "active" : ""} onClick={() => {
           close();
           if (window.location.hash) window.history.replaceState(null, "", window.location.pathname + window.location.search);
           window.scrollTo({ top: 0 });
@@ -1303,7 +1343,7 @@ export function App() {
         </button>
         <button type="button" className={riskPages.includes(activePage) ? "active" : ""} onClick={() => open("risk")}><ShieldWarning size={18} /> 预警值守</button>
         <button type="button" className={activePage === "replay" ? "active" : ""} onClick={() => open("replay")}><Drop size={18} /> 灌溉回放</button>
-        <button type="button" className={activePage === "production" ? "active" : ""} onClick={() => open("production")}><FileText size={18} /> 生产档案</button>
+        <button type="button" onClick={scrollToProduction}><FileText size={18} /> 生产档案</button>
       </nav>
       <div className="header-tools"><ClockDisplay />
         <button type="button" className="fullscreen-button shortcuts-button" onClick={() => open("help")}
@@ -1362,15 +1402,26 @@ export function App() {
           <FieldPanel onOpen={() => openField("overhead")} />
         </aside>
       </div>
+      <DataLinksBar sources={dataLinks} onOpen={() => open("links")} />
+      <Ticker alerts={alerts} agro={agro} profile={profile} onOpen={() => open("briefing")} />
+      <ProductionRecords onField={openField} onRisk={() => open("actions")} onWater={() => open("water")} />
       <footer className="app-footer">
-        <button type="button" className="text-button" onClick={() => open("water")}><Drop size={15} /> 区域水环境 <CaretRight size={13} /></button>
-        <button type="button" className="text-button" onClick={() => open("briefing")}><Broadcast size={16} /> 农情简报 <CaretRight size={13} /></button>
-        <button type="button" className="text-button" onClick={() => open("links")}><Database size={15} /> 数据链路 <CaretRight size={13} /></button>
+        <span className="footer-brand"><Monitor size={15} /> 珠海斗门智慧农田监测</span>
+        <span className="footer-links"><Clock size={14} /> 数据来源
+          <a href={stationUrl} target="_blank" rel="noreferrer">中国天气网</a>
+          <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a>
+          <a href="https://power.larc.nasa.gov/" target="_blank" rel="noreferrer">NASA POWER</a>
+        </span>
+        <span className="footer-actions">
+          <button type="button" className="text-button" onClick={() => open("water")}><Drop size={15} /> 区域水环境 <CaretRight size={13} /></button>
+          <button type="button" className="text-button" onClick={() => open("briefing")}><Broadcast size={16} /> 农情简报 <CaretRight size={13} /></button>
+          <button type="button" className="text-button" onClick={() => open("links")}><Database size={15} /> 数据链路 <CaretRight size={13} /></button>
+        </span>
       </footer>
     </main>
 
     {view && <Details page={view.type} title={view.village?.name ?? titles[view.type]}
-      wide={["field", "image", "replay", "production", "report", "weather", "forecast"].includes(view.type)} onClose={close}
+      wide={["field", "image", "replay", "report", "weather", "forecast"].includes(view.type)} onClose={close}
       onBack={views.length > 1 ? () => setViews((previous) => previous.slice(0, -1)) : undefined}>
       {["weather", "forecast"].includes(view.type) && <WeatherDetails weather={view.type === "weather" ? observations : weather} variant={view.type} risk={risk} />}
       {view.type === "soil" && <SoilDetails profile={profile} satellite={satelliteSoil} onReplay={() => open("replay")} />}
@@ -1401,7 +1452,6 @@ export function App() {
       {view.type === "village" && <VillageDetails village={view.village} onField={openField} />}
       {view.type === "plot" && <PlotDetails profile={profile} ndvi={ndvi} onSoil={() => open("soil")} onField={openField} onReplay={() => open("replay")} />}
       {view.type === "links" && <DataLinksDetails sources={dataLinks} />}
-      {view.type === "production" && <ProductionRecords onField={openField} onRisk={() => open("actions")} onWater={() => open("water")} />}
       {view.type === "water" && <WaterDetails />}
       {view.type === "briefing" && <Briefing alerts={alerts} agro={agro} profile={profile} />}
       {view.type === "report" && <DailyReport observations={observations} profile={profile} agro={agro} alerts={alerts} risk={risk} />}

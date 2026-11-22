@@ -502,6 +502,7 @@ button.level-badge:hover { filter: brightness(1.19); }
 
 @media (prefers-reduced-motion: reduce) {
   .alert-row.alert-pulse { animation: none; }
+  .ticker-track { animation: none; }
   .layer-track i { transition: none; }
 }
 .primary-button {
@@ -510,8 +511,60 @@ button.level-badge:hover { filter: brightness(1.19); }
 }
 .primary-button:hover { background: #a0e3e0; }
 .primary-button svg:last-child { margin-left: auto; }
-.app-footer { min-height: 33px; display: flex; align-items: center; justify-content: flex-end; gap: 20px; padding: 2px 1px; }
+.app-footer {
+  min-height: 44px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: 10px 22px; padding: 8px 1px; color: var(--subtle); font-size: 12px;
+}
+.app-footer span { display: inline-flex; align-items: center; gap: 7px; }
+.app-footer svg { flex: none; }
+.app-footer a { color: #9fc1d4; text-decoration: none; }
+.app-footer a:hover { color: var(--mint); }
+.footer-brand { color: #d5e4ee; font-weight: 650; }
+.footer-links { flex-wrap: wrap; gap: 4px 9px; }
+.footer-actions { display: inline-flex; align-items: center; gap: 18px; margin-left: auto; }
 .app-footer .text-button { font-size: 12px; gap: 6px; }
+
+/* 主界面数据链路状态条 */
+.datalinks-bar {
+  display: flex; align-items: center; gap: 14px; margin-top: 14px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 7px 13px;
+}
+.datalinks-label { display: flex; align-items: center; gap: 6px; color: #d5e4ee; font-size: 12.5px; font-weight: 650; flex: none; }
+.datalinks-label svg { color: var(--mint); }
+.datalinks-items { display: flex; flex-wrap: wrap; gap: 4px 6px; flex: 1; min-width: 0; }
+.datalinks-item {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; min-width: 0;
+  border: 1px solid #2b4655; border-radius: 20px; background: #122430; color: #cfe2ee; font-size: 12px;
+}
+.datalinks-item:hover { border-color: #40607a; }
+.datalinks-item small { color: var(--subtle); font-size: 11px; }
+.datalinks-dot { width: 7px; height: 7px; border-radius: 50%; background: #6d8ba0; flex: none; }
+.datalinks-dot.current { background: #58c98a; box-shadow: 0 0 6px rgba(88, 201, 138, .55); }
+.datalinks-dot.cached { background: #e8c95c; }
+.datalinks-dot.archive { background: #7aa6c7; }
+.datalinks-dot.unavailable { background: #ef6a5a; }
+.datalinks-dot.loading { animation: link-pulse 1.4s ease-in-out infinite; }
+@keyframes link-pulse { 50% { opacity: .35; } }
+.link-live { color: #7ad3d0; }
+.link-stale { color: var(--subtle); }
+
+/* 底部滚动农情播报：常驻视口底部，点击打开完整简报 */
+.ticker-bar {
+  position: sticky; bottom: 0; z-index: 30;
+  display: flex; align-items: center; gap: 0; margin-top: 12px; height: 36px;
+  background: var(--surface); border: 1px solid #45637a; border-radius: 8px; overflow: hidden;
+  box-shadow: 0 -4px 22px rgba(3, 12, 20, .45); cursor: pointer;
+}
+.ticker-label {
+  display: inline-flex; align-items: center; gap: 7px; flex: none; height: 100%; padding: 0 14px;
+  background: linear-gradient(180deg, #14313c, #102631); color: var(--mint); font-size: 13px; font-weight: 650;
+  border-right: 1px solid var(--line); white-space: nowrap;
+}
+.ticker-viewport { flex: 1; overflow: hidden; min-width: 0; mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent); }
+.ticker-track { display: inline-flex; white-space: nowrap; animation: ticker-scroll 46s linear infinite; will-change: transform; }
+.ticker-track > span { padding-right: 90px; color: #c3d6e4; font-size: 13px; line-height: 36px; }
+.ticker-bar:hover .ticker-track { animation-play-state: paused; }
+@keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
 body:has(.detail[open]) { overflow: hidden; }
 .detail {
@@ -603,7 +656,7 @@ body:has(.detail[open]) { overflow: hidden; }
 .gallery-grid button:hover, .gallery-grid button[aria-pressed="true"] { color: #c9eff0; border-color: #64a5b6; background: #1d3746; }
 .gallery-grid img { width: 100%; aspect-ratio: 1.75; object-fit: cover; border-radius: 3px; }
 .gallery-grid span { font-size: 12px; padding: 0 2px 3px; }
-.production-records { min-width: 0; }
+.production-records { min-width: 0; margin-top: 16px; scroll-margin-top: 78px; }
 .crop-calendar-panel { padding: 17px; margin-bottom: 15px; }
 .calendar-scroll { overflow-x: auto; overscroll-behavior-inline: contain; }
 .calendar-table { width: 100%; min-width: 810px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 12px; }
@@ -669,6 +722,8 @@ body:has(.detail[open]) { overflow: hidden; }
   .agro-core { gap: 9px; margin-bottom: 7px; }
   .agro-advice { padding: 7px 10px; margin-bottom: 6px; }
   .map-utility .map-hint { flex-basis: 100%; }
+  .ticker-bar { height: 32px; margin-top: 9px; }
+  .ticker-track > span { line-height: 32px; }
 }
 @media (max-width: 1270px) {
   .clock-display > span { display: none; }
@@ -729,6 +784,11 @@ body:has(.detail[open]) { overflow: hidden; }
   .village-card strong { font-size: 13px; }
   .village-card small { font-size: 11px; }
   .app-footer { flex-wrap: wrap; }
+  .datalinks-bar { padding: 6px 9px; gap: 9px; }
+  .datalinks-label { display: none; }
+  .ticker-label { padding: 0 9px; font-size: 11px; }
+  .ticker-track > span { font-size: 12px; }
+  .footer-brand { display: none; }
   .production-grid { grid-template-columns: 1fr; }
   .map-credit { display: inline-block; max-width: 87%; }
   .detail { --dialog-inset: 10px; }
