@@ -48,8 +48,9 @@ export function useReading(url, refreshMs, fallback) {
         }
         if (!controller.signal.aborted) {
           setReading((previous) => {
-            if (previous?.status !== "unavailable" && previous?.current) return { ...previous, status: "cached" };
-            return snapshot ? { ...snapshot, status: "cached" } : { status: "unavailable" };
+            const cached = previous && previous.status !== "unavailable" ? previous : snapshot;
+            return cached ? { ...cached, status: "cached", ...(cached.history?.length && { historyStatus: "cached" }) }
+              : { status: "unavailable" };
           });
         }
       } finally {

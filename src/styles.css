@@ -31,7 +31,7 @@ h1, h2, h3, h4, p, figure { margin: 0; }
 small { font-size: .83em; }
 
 .app-header {
-  min-height: 78px;
+  min-height: 64px;
   padding: 0 clamp(18px, 2.05vw, 42px);
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -64,10 +64,10 @@ small { font-size: .83em; }
 }
 .fullscreen-button:hover, .icon-button:hover { background: #254457; }
 
-.dashboard { width: 100%; padding: 0 clamp(18px, 2.05vw, 42px); max-width: 2560px; margin-inline: auto; }
+.dashboard { width: 100%; padding: 0 clamp(18px, 1.65vw, 36px); max-width: 2560px; margin-inline: auto; display: flex; flex-direction: column; min-height: calc(100dvh - 64px); }
 .dashboard-head {
-  min-height: 52px; display: flex; justify-content: space-between; gap: 16px; align-items: center;
-  padding-block: 5px;
+  min-height: 64px; display: flex; justify-content: space-between; gap: 12px; align-items: center;
+  padding-block: 6px;
 }
 .dashboard-head h1 { font-size: clamp(21px, 1.5vw, 27px); letter-spacing: .04em; line-height: 1.2; }
 .dashboard-head p { color: var(--muted); margin-top: 3px; font-size: 12.5px; letter-spacing: .035em; }
@@ -85,7 +85,7 @@ small { font-size: .83em; }
 }
 .kpi-card {
   position: relative; overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
-  padding: 9px 13px; display: grid; gap: 4px; min-width: 0; font: inherit; color: inherit; text-align: left;
+  padding: 8px 13px; display: grid; gap: 3px; min-width: 0; font: inherit; color: inherit; text-align: left;
   background-image: linear-gradient(160deg, rgba(122,211,208,.055), transparent 42%);
   transition: transform .18s ease, border-color .18s ease, background-color .18s ease;
 }
@@ -104,9 +104,9 @@ small { font-size: .83em; }
 .kpi-value strong small { font-size: .42em; font-weight: 600; color: var(--muted); letter-spacing: 0; }
 .kpi-card.hot .kpi-value strong { color: #ffabb8; }
 .kpi-card small { color: var(--subtle); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kpi-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; min-width: 0; }
+.kpi-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px; min-width: 0; }
 .kpi-foot small { flex: 1; text-align: right; }
-.kpi-spark { flex: none; opacity: .95; }
+.kpi-spark { width: clamp(40px, 5vw, 92px); height: 19px; flex: none; opacity: .95; }
 .grade-badge {
   display: inline-flex; align-items: center; flex: none; border: 1px solid; border-radius: 4px;
   padding: 2px 7px; font-size: 11px; font-weight: 650; white-space: nowrap;
@@ -143,25 +143,6 @@ small { font-size: .83em; }
 button.cross-row:hover span strong { color: var(--mint); }
 
 /* 数据链路自检 */
-.datalinks-bar {
-  display: flex; align-items: center; gap: 14px; margin-top: 12px;
-  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 7px 13px;
-}
-.datalinks-label { display: flex; align-items: center; gap: 6px; color: #d5e4ee; font-size: 12.5px; font-weight: 650; flex: none; }
-.datalinks-label svg { color: var(--mint); }
-.datalinks-items { display: flex; flex-wrap: wrap; gap: 4px 6px; flex: 1; min-width: 0; }
-.datalinks-item {
-  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; min-width: 0;
-  border: 1px solid #2b4655; border-radius: 20px; background: #122430; color: #cfe2ee; font-size: 12px;
-}
-.datalinks-item:hover { border-color: #40607a; }
-.datalinks-item small { color: var(--subtle); font-size: 11px; }
-.datalinks-dot { width: 7px; height: 7px; border-radius: 50%; background: #6d8ba0; flex: none; }
-.datalinks-dot.current { background: #58c98a; box-shadow: 0 0 6px rgba(88, 201, 138, .55); }
-.datalinks-dot.cached { background: #e8c95c; }
-.datalinks-dot.unavailable { background: #ef6a5a; }
-.datalinks-dot.loading { animation: link-pulse 1.4s ease-in-out infinite; }
-@keyframes link-pulse { 50% { opacity: .35; } }
 .link-live { color: #7ad3d0; }
 .link-stale { color: var(--subtle); }
 
@@ -225,14 +206,9 @@ button.cross-row:hover span strong { color: var(--mint); }
 .plot-links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 
 /* 农情日报：白纸公文样式，打印友好 */
-.report-overlay {
-  position: fixed; inset: 0; z-index: 1100; overflow: auto; background: #06111ad9;
-  display: flex; justify-content: flex-end; animation: panel-in .35s ease both;
-}
 .report-sheet {
-  width: min(880px, 96vw); min-height: 100%; background: #fbfcfd; color: #1a2833;
+  width: 100%; background: #fbfcfd; color: #1a2833;
   padding: clamp(22px, 3vw, 44px) clamp(20px, 3vw, 52px); font-size: 14px; line-height: 1.65;
-  box-shadow: -8px 0 30px #0006;
 }
 .report-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding-bottom: 14px; border-bottom: 3px solid #1f3d54; margin-bottom: 6px; }
 .report-head h2 { font-size: 24px; letter-spacing: .05em; color: #14293a; }
@@ -265,8 +241,11 @@ button.cross-row:hover span strong { color: var(--mint); }
 @media print {
   @page { size: A4; margin: 13mm; }
   body { background: #fff; }
-  #root .app-header, #root main { display: none !important; }
-  .report-overlay { position: static; display: block; overflow: visible; background: none; animation: none; }
+  body:has(.detail-report[open]) { overflow: visible !important; }
+  body:has(.detail-report[open]) #root > :not(.detail-report) { display: none !important; }
+  dialog.detail-report[open] { position: static; display: block; margin: 0; width: 100%; max-height: none; overflow: visible; border: 0; box-shadow: none; }
+  .detail-report::backdrop, .detail-report .detail-header { display: none; }
+  .detail-report .detail-content { overflow: visible; }
   .report-sheet { width: 100%; padding: 0; box-shadow: none; }
   .report-actions { display: none; }
   .report-section { break-inside: avoid; }
@@ -274,19 +253,15 @@ button.cross-row:hover span strong { color: var(--mint); }
 
 .board-grid {
   display: grid;
-  grid-template-columns: minmax(285px, .94fr) minmax(0, 2.48fr) minmax(290px, 1fr);
-  gap: 16px;
-  min-height: 600px;
-  height: calc(100dvh - 296px);
+  grid-template-columns: minmax(276px, 1fr) minmax(0, 2.38fr) minmax(282px, 1fr);
+  gap: 14px;
+  flex: 1;
 }
-.board-column { display: grid; min-width: 0; min-height: 0; gap: 13px; }
-.board-column .panel { overflow: hidden; }
-.readings { grid-template-rows: minmax(238px, 1.08fr) minmax(212px, .98fr) minmax(158px, .78fr); }
-.operations { grid-template-rows: minmax(262px, 1.2fr) minmax(238px, 1.09fr) auto; }
+.board-column { display: grid; grid-template-rows: auto auto 1fr; min-width: 0; gap: 12px; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; min-width: 0; min-height: 0; transition: border-color .25s ease; }
 .board-grid .panel:hover { border-color: #40607a; }
-.board-column .panel { display: flex; flex-direction: column; padding: clamp(13px, 1.03vw, 20px); }
-.panel-title { display: flex; align-items: center; justify-content: space-between; gap: 5px; min-height: 27px; margin-bottom: 12px; }
+.board-column .panel { display: flex; flex-direction: column; padding: 12px; }
+.panel-title { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 27px; margin-bottom: 9px; }
 .panel-title h2 { font-size: clamp(16px, 1vw, 20px); font-weight: 680; letter-spacing: .018em; display: flex; gap: 9px; align-items: center; }
 .panel-title h2 svg { color: var(--mint); flex: none; }
 .text-button {
@@ -294,22 +269,19 @@ button.cross-row:hover span strong { color: var(--mint); }
   color: #adc2d2; padding: 5px 0 5px 6px; font-size: 13px; white-space: nowrap;
 }
 .text-button:hover { color: var(--mint); }
-.weather-core { display: flex; align-items: center; gap: 14px; margin: 0 0 6px; cursor: pointer; }
-.weather-core strong { transition: color .2s ease; }
-.weather-core:hover strong, .weather-core:focus-visible strong { color: #d6f4f2; }
+.weather-core { display: flex; align-items: center; gap: 12px; margin: 0 0 7px; }
 .weather-icon { color: var(--gold); flex: none; }
-.weather-core strong { font: 650 clamp(39px, 2.95vw, 58px)/1 var(--number); letter-spacing: -.045em; }
+.weather-core strong { font: 650 clamp(38px, 2.55vw, 49px)/1 var(--number); letter-spacing: -.045em; }
 .weather-core strong small { font-size: .39em; color: var(--muted); margin-left: 6px; letter-spacing: 0; }
 .weather-core p { margin-top: 6px; font-size: 14px; color: #dce8f1; }
 .weather-core p span { color: var(--muted); font-size: 12px; }
-.weather-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; row-gap: 5px; margin-block: auto; }
+.weather-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; row-gap: 5px; }
 .metric { border-top: 1px solid var(--line); min-width: 0; padding-top: 5px; }
 .metric span { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .metric span svg { color: #8ab7c4; }
 .metric strong { display: block; font-family: var(--number); font-size: 21px; font-variant-numeric: tabular-nums; line-height: 1.25; }
 .metric small { font-size: 11px; color: var(--muted); font-weight: 500; }
-.panel-footer { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 9px; display: flex; justify-content: space-between; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
-.panel-footer a { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.panel-footer { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 6px; display: flex; justify-content: space-between; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
 .weather-panel .panel-title { margin-bottom: 7px; }
 .weather-panel .panel-footer { margin-top: 9px; padding-top: 7px; }
 
@@ -324,10 +296,11 @@ button.cross-row:hover span strong { color: var(--mint); }
 .legend-rain { background: var(--mint); height: 7px; }
 .legend-probability { background: #85abc7; height: 2px; }
 .chart { width: 100%; min-width: 0; }
-.forecast-chart, .soil-chart { flex: 1; min-height: 80px; }
+.forecast-chart { flex: 1; min-height: 98px; }
+.soil-chart { height: 90px; flex: none; }
 
 /* 土壤墒情剖面：三层横条 + 分级 */
-.soil-panel .layer-bars { display: grid; gap: 7px; margin-bottom: 9px; }
+.soil-panel .layer-bars { display: grid; gap: 5px; margin-bottom: 7px; }
 .layer-row { display: grid; grid-template-columns: auto minmax(64px, 1fr) auto auto; align-items: center; gap: 9px; min-width: 0; border-radius: 4px; padding: 2px 5px; margin-inline: -5px; transition: background-color .15s ease; }
 .layer-row:hover { background: rgba(122,211,208,.07); }
 .layer-row:hover .layer-track i { filter: brightness(1.2); }
@@ -343,7 +316,7 @@ button.cross-row:hover span strong { color: var(--mint); }
 .soil-summary span { font-size: 11px; padding: 4px 7px; border-radius: 3px; background: #193543; color: #bbd9e5; white-space: nowrap; }
 .chart-empty { flex: 1; min-height: 80px; display: grid; place-items: center; text-align: center; color: var(--subtle); border: 1px dashed var(--line); border-radius: 5px; font-size: 13px; }
 
-.map-panel { display: flex; flex-direction: column; padding: 15px; }
+.map-panel { display: flex; flex-direction: column; padding: 12px; }
 .map-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 1px 3px; margin-bottom: 11px; gap: 8px; flex-wrap: wrap; }
 .map-panel-header .panel-title { margin: 0; }
 .map-switch { display: flex; align-items: center; padding: 2px; gap: 2px; background: #0d1c26; border: 1px solid #304b5b; border-radius: 6px; }
@@ -352,12 +325,7 @@ button.cross-row:hover span strong { color: var(--mint); }
 .map-switch button[aria-pressed="true"] { color: #c6eef0; background: #244759; }
 .map-stage { isolation: isolate; background: #152e3a; position: relative; overflow: hidden; border-radius: 6px; flex: 1; min-height: 370px; border: 1px solid #425766; }
 .map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; background: #192931; }
-.map-hint {
-  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 500;
-  background: #0f2531e6; border: 1px solid #3a5f73; color: #cfe6f2; border-radius: 5px;
-  padding: 5px 11px; font-size: 11.5px; pointer-events: none; white-space: nowrap;
-}
-.map-canvas.wheel-zoom ~ .map-hint { display: none; }
+.map-hint { color: var(--muted); font-size: 11.5px; margin: 0; }
 .archived-map-image { filter: saturate(.68) brightness(.91); }
 .aerial-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 48%; }
 .map-key, .map-provenance button, .map-controls button {
@@ -369,13 +337,15 @@ button.cross-row:hover span strong { color: var(--mint); }
 .pilot-key { top: 52px; font-size: 12px; padding: 6px 9px; }
 .pilot-key-button { cursor: pointer; font: inherit; }
 .pilot-key-button:hover { border-color: var(--mint); }
-.aerial-overlay { transition: opacity .7s ease; pointer-events: none; }
-.aerial-keys { position: absolute; z-index: 500; left: 13px; bottom: 44px; display: grid; gap: 4px; }
-.aerial-key { position: static; font-size: 12px; padding: 5px 9px; color: #f0d99a; border-color: #8a6d2f; }
+.aerial-reveal { position: absolute; inset: 0; z-index: 450; overflow: hidden; pointer-events: none; }
+.aerial-reveal img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.aerial-reveal-caption { position: absolute; bottom: 13px; left: 13px; z-index: 501; max-width: calc(100% - 26px); padding: 6px 9px; border: 1px solid #647f8d; background: #0a1824e8; border-radius: 5px; color: #ecf9ff; font-size: 12px; }
 .pilot-swatch { display: inline-block; width: 14px; height: 9px; border: 1px dashed #e8c95c; background: rgba(232,201,92,.25); border-radius: 2px; }
-.map-provenance { bottom: 12px; left: 13px; display: flex; flex-wrap: wrap; gap: 5px; }
+.map-provenance { position: static; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
 .map-provenance button { font-size: 11px; padding: 5px 8px; border-radius: 4px; }
-.map-credit { color: #e3eef7; font-size: 10px; line-height: 1.45; padding: 4px 7px; border-radius: 4px; background: #091722e8; max-width: min(410px, 72%); }
+.map-credit { color: var(--subtle); font-size: 10px; line-height: 1.45; }
+.map-view { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.map-utility { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; padding-top: 8px; }
 .satellite-map-image { filter: saturate(.93) brightness(.98); }
 .map-stage .leaflet-control-scale-line { background: #0c1a25e8; border-color: #b9d7e6; color: #f0f9fc; text-shadow: none; }
 .map-controls { top: 13px; right: 13px; display: grid; gap: 5px; }
@@ -390,9 +360,9 @@ button.cross-row:hover span strong { color: var(--mint); }
 .leaflet-tooltip.village-name { border: 1px solid #326875; background: #0d303d; color: #effaff; box-shadow: 0 2px 7px #18352950; font: 650 13px/1.1 var(--number); padding: 7px 9px; }
 .village-name.leaflet-tooltip-left::before { border-left-color: #0d303d; }
 .village-name.leaflet-tooltip-right::before { border-right-color: #0d303d; }
-.survey-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.survey-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
 .four-quads {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 8px;
 }
 .four-quads button, .quad-pending {
   display: flex; align-items: center; justify-content: center; gap: 7px; min-width: 0;
@@ -521,14 +491,6 @@ button.level-badge:hover { filter: brightness(1.19); }
 .agro-advice:hover { filter: brightness(1.16); }
 .agro-advice svg { flex: none; }
 .agro-advice-irrigate { border-color: rgba(240,149,74,.5); background: rgba(240,149,74,.1); color: #ffb98a; }
-.agro-risk-line {
-  display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; margin-bottom: 10px; min-width: 0;
-  font: inherit; border: 0; background: transparent; border-radius: 5px; padding: 5px 8px; margin-inline: -8px;
-  cursor: pointer; transition: background-color .15s ease, color .15s ease;
-}
-.agro-risk-line:hover { background: rgba(236,195,132,.09); color: #e9dcbe; }
-.agro-risk-line svg { color: var(--gold); flex: none; }
-.agro-risk-line span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agro-panel .primary-button { margin-top: auto; }
 .agro-risk-list { display: grid; gap: 9px; margin: 12px 0 4px; }
 .agro-risk-item {
@@ -538,40 +500,6 @@ button.level-badge:hover { filter: brightness(1.19); }
 .agro-risk-item strong { font-size: 14px; color: #f4dfb4; }
 .agro-risk-item span { font-size: 13px; color: #d3e1ec; }
 .agro-risk-item small { color: var(--subtle); font-size: 11px; }
-
-/* 底部农情播报 */
-.ticker-bar {
-  display: flex; align-items: center; gap: 0; margin-top: 10px; height: 36px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
-}
-.ticker-label {
-  display: inline-flex; align-items: center; gap: 7px; flex: none; height: 100%; padding: 0 14px;
-  background: linear-gradient(180deg, #14313c, #102631); color: var(--mint); font-size: 13px; font-weight: 650;
-  border-right: 1px solid var(--line); white-space: nowrap;
-}
-.ticker-viewport { flex: 1; overflow: hidden; min-width: 0; mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent); }
-.ticker-track { display: inline-flex; white-space: nowrap; animation: ticker-scroll 46s linear infinite; will-change: transform; }
-.ticker-track > span { padding-right: 90px; color: #c3d6e4; font-size: 13px; line-height: 36px; }
-.ticker-bar:hover .ticker-track { animation-play-state: paused; }
-@keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-
-/* 面板入场动效 */
-@keyframes panel-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-.board-grid .panel { animation: panel-in .55s cubic-bezier(.22,.68,.34,1) both; }
-.board-grid .readings .panel:nth-child(1) { animation-delay: .05s; }
-.board-grid .readings .panel:nth-child(2) { animation-delay: .16s; }
-.board-grid .readings .panel:nth-child(3) { animation-delay: .27s; }
-.board-grid .map-panel { animation-delay: .1s; }
-.board-grid .operations .panel:nth-child(1) { animation-delay: .22s; }
-.board-grid .operations .panel:nth-child(2) { animation-delay: .33s; }
-.board-grid .operations .panel:nth-child(3) { animation-delay: .44s; }
-.kpi-strip .kpi-card { animation: panel-in .5s cubic-bezier(.22,.68,.34,1) both; }
-.kpi-strip .kpi-card:nth-child(1) { animation-delay: 0s; }
-.kpi-strip .kpi-card:nth-child(2) { animation-delay: .06s; }
-.kpi-strip .kpi-card:nth-child(3) { animation-delay: .12s; }
-.kpi-strip .kpi-card:nth-child(4) { animation-delay: .18s; }
-.kpi-strip .kpi-card:nth-child(5) { animation-delay: .24s; }
-.kpi-strip .kpi-card:nth-child(6) { animation-delay: .3s; }
 
 /* 生效高级别预警脉冲 */
 @keyframes alert-pulse {
@@ -593,8 +521,7 @@ button.level-badge:hover { filter: brightness(1.19); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .board-grid .panel, .kpi-strip .kpi-card, .alert-row.alert-pulse, .village-pin::before { animation: none; }
-  .ticker-track { animation: none; }
+  .alert-row.alert-pulse, .village-pin::before { animation: none; }
   .layer-track i { transition: none; }
 }
 .primary-button {
@@ -603,23 +530,39 @@ button.level-badge:hover { filter: brightness(1.19); }
 }
 .primary-button:hover { background: #a0e3e0; }
 .primary-button svg:last-child { margin-left: auto; }
-.app-footer {
-  min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 8px 1px; color: var(--subtle); font-size: 12px;
-}
-.app-footer span { display: inline-flex; align-items: center; gap: 6px; }
-.footer-divider { opacity: .65; margin: 0 5px; }
+.app-footer { min-height: 33px; display: flex; align-items: center; justify-content: flex-end; gap: 20px; padding: 2px 1px; }
+.app-footer .text-button { font-size: 12px; gap: 6px; }
 
+body:has(.detail[open]) { overflow: hidden; }
 .detail {
-  margin: auto 0 auto auto; width: min(580px, 94vw); max-width: none; height: 100dvh; max-height: 100dvh; overflow: auto;
-  padding: 0; border: 0; border-left: 1px solid #456377; background: #132531; color: #edf5fa;
+  margin: auto; width: min(780px, calc(100vw - 36px)); max-width: none; max-height: min(900px, calc(100dvh - 56px)); overflow: hidden;
+  padding: 0; border: 1px solid #456377; border-radius: 12px; background: #132531; color: #edf5fa;
+  box-shadow: 0 24px 100px #020a13cc;
 }
+.detail[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); }
 .detail::backdrop { background: #06111ac2; }
-.detail-wide { width: min(1030px, 94vw); }
-.detail-content { padding: clamp(18px, 2.2vw, 32px); min-height: 100%; }
-.detail header { border-bottom: 1px solid #3a586a; display: flex; align-items: center; gap: 12px; justify-content: space-between; padding-bottom: 15px; margin-bottom: 18px; }
-.detail header h2 { font-size: clamp(21px, 2.25vw, 29px); }
-.detail p { color: #c9d7e4; line-height: 1.6; margin-block: 10px; font-size: 14px; }
+.detail-wide { width: min(1170px, calc(100vw - 36px)); }
+.detail-report { width: min(910px, calc(100vw - 36px)); }
+.detail-content { padding: clamp(15px, 2vw, 28px); overflow: auto; overscroll-behavior: contain; }
+.detail-report .detail-content { padding: 0; }
+.detail-header { padding: 12px clamp(15px, 2vw, 28px); background: #152939; border-bottom: 1px solid #3a586a; display: flex; align-items: center; gap: 12px; }
+.detail-header h2 { flex: 1; min-width: 0; font-size: clamp(18px, 1.65vw, 25px); }
+.detail-header .icon-button { padding: 8px; min-height: 37px; min-width: 37px; }
+.detail-content p { line-height: 1.6; }
+.detail-content > p { color: #c9d7e4; margin-block: 10px; font-size: 14px; }
+.detail-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.detail-metrics .metric { background: #182e3d; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.detail-metrics .metric strong { margin-top: 5px; }
+.reading-table { overflow: auto; margin: 8px 0; border: 1px solid var(--line); border-radius: 6px; }
+.reading-table th, .reading-table td { border: 0; border-bottom: 1px solid var(--line); }
+.reading-table th { background: #1e394b; color: #d7e9f4; }
+.reading-table td { color: #d9e7f1; white-space: nowrap; }
+.reading-table tr:nth-child(even) { background: #142938; }
+.reading-table tbody tr:last-child td { border-bottom: 0; }
+.production-stats .reading-table td:first-child { white-space: normal; }
+.detail-divider { border: 0; border-top: 1px solid var(--line); margin-block: 13px; }
+.briefing-list { padding-left: 22px; margin: 0; color: #d8e6ef; line-height: 1.65; }
+.briefing-list li + li { margin-top: 10px; }
 .detail-heading { font-size: 17px; margin-top: 20px; }
 .detail-photo img, .detail video { display: block; width: 100%; max-height: 50vh; object-fit: contain; border-radius: 6px; }
 .detail-photo figcaption { margin-top: 7px; color: var(--muted); font-size: 12px; }
@@ -654,7 +597,8 @@ button.level-badge:hover { filter: brightness(1.19); }
 .gallery-main img { background: #0a1520; }
 .gallery-main figcaption { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .gallery-main figcaption strong { color: #edf5fa; font-size: 15px; }
-.gallery-main figcaption a { margin-left: auto; }
+.gallery-main figcaption button { margin-left: auto; }
+.full-image img { max-height: none; }
 .gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 7px; margin-top: 13px; }
 .gallery-grid button {
   display: flex; flex-direction: column; padding: 5px; color: var(--muted); text-align: left;
@@ -663,7 +607,7 @@ button.level-badge:hover { filter: brightness(1.19); }
 .gallery-grid button:hover, .gallery-grid button[aria-pressed="true"] { color: #c9eff0; border-color: #64a5b6; background: #1d3746; }
 .gallery-grid img { width: 100%; aspect-ratio: 1.75; object-fit: cover; border-radius: 3px; }
 .gallery-grid span { font-size: 12px; padding: 0 2px 3px; }
-.production-records { padding: 25px 0 34px; border-top: 1px solid var(--line); scroll-margin-top: 20px; }
+.production-records { min-width: 0; }
 .crop-calendar-panel { padding: 17px; margin-bottom: 15px; }
 .calendar-grid {
   display: grid; grid-template-columns: minmax(72px, auto) repeat(12, minmax(0, 1fr));
@@ -684,9 +628,7 @@ button.level-badge:hover { filter: brightness(1.19); }
 .yield-chart { height: 205px; margin-top: 4px; }
 .village-points { margin: 10px 0 4px; padding-left: 20px; }
 .village-points li { color: #c9d7e4; font-size: 13.5px; line-height: 1.6; margin-bottom: 6px; }
-.record-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 14px; }
-.record-head h2 { font-size: 25px; }
-.record-head p { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.record-head { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 .production-grid { display: grid; grid-template-columns: 1fr 1.15fr .9fr; gap: 15px; }
 .production-grid > section { padding: 17px; }
 .statistics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin-bottom: 9px; }
@@ -712,34 +654,34 @@ button.level-badge:hover { filter: brightness(1.19); }
 
 @media (max-height: 960px) and (min-width: 1061px) {
   .app-header { min-height: 65px; }
+  .dashboard { min-height: calc(100dvh - 65px); }
   .dashboard-head { min-height: 44px; padding-block: 4px; }
   .dashboard-head h1 { font-size: 20px; }
-  .board-grid { height: auto; min-height: 0; }
   .board-column { gap: 11px; }
-  .readings { grid-template-rows: auto auto auto; }
-  .operations { grid-template-rows: auto auto auto; }
-  .soil-chart, .forecast-chart { flex: none; height: 88px; }
+  .soil-chart { height: 76px; }
+  .forecast-chart { min-height: 82px; }
   .kpi-strip { gap: 10px; margin-bottom: 9px; }
-  .kpi-card { padding: 8px 11px; }
+  .kpi-card { padding: 7px 11px; gap: 2px; }
+  .kpi-foot { min-height: 14px; }
+  .kpi-spark { height: 14px; }
   .kpi-value strong { font-size: clamp(23px, 1.5vw, 29px); }
-  .ticker-bar { height: 32px; margin-top: 9px; }
-  .ticker-track > span { line-height: 32px; }
-  .board-column .panel { padding: 12px 13px; }
-  .panel-title { margin-bottom: 8px; }
+  .board-column .panel { padding: 9px 12px; }
+  .panel-title { margin-bottom: 6px; }
   .weather-core strong { font-size: 38px; }
   .weather-core { margin-bottom: 5px; gap: 12px; }
   .weather-icon { width: 40px; }
   .weather-grid { row-gap: 4px; }
+  .weather-grid .metric:first-child, .weather-grid .metric:last-child { display: none; }
   .soil-panel .layer-bars { gap: 5px; margin-bottom: 7px; }
+  .soil-panel .layer-row { padding-block: 0; }
+  .forecast-summary { margin-bottom: 5px; }
   .grade-scale { padding-top: 4px; }
   .field-thumbnail { min-height: 104px; }
   .map-stage { min-height: 300px; }
-  .latest-archive > small { margin-block: 2px; }
-  .latest-archive .alert-row { padding-block: 5px; }
-  .latest-archive .alert-row small { display: none; }
+  .risk-panel .latest-archive { display: none; }
   .agro-core { gap: 9px; margin-bottom: 7px; }
   .agro-advice { padding: 7px 10px; margin-bottom: 6px; }
-  .agro-risk-line { margin-bottom: 8px; }
+  .map-utility .map-hint { flex-basis: 100%; }
 }
 @media (max-width: 1270px) {
   .clock-display > span { display: none; }
@@ -752,12 +694,20 @@ button.level-badge:hover { filter: brightness(1.19); }
   .header-tools, .wordmark { padding-top: 12px; }
   .app-header { row-gap: 6px; }
   .kpi-strip { grid-template-columns: repeat(3, 1fr); }
-  .board-grid { height: auto; min-height: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .dashboard { min-height: 0; }
+  .board-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .map-panel { grid-column: 1 / -1; grid-row: 1; }
   .map-stage { min-height: 440px; }
   .board-column .panel { min-height: 0; }
-  .operations { grid-template-rows: minmax(248px, 1fr) minmax(224px, 1.14fr) auto; }
   .production-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 1460px) {
+  .four-quads button, .quad-pending { flex-wrap: wrap; gap: 3px 5px; font-size: 12px; }
+  .four-quads small { font-size: 10px; }
+  .village-card { padding: 9px 8px; gap: 7px; }
+  .village-card strong { font-size: 13px; }
+  .agro-balance { gap: 6px; }
+  .agro-balance span { white-space: normal; }
 }
 @media (max-width: 630px) {
   .app-header, .dashboard { padding-inline: 12px; }
@@ -769,17 +719,24 @@ button.level-badge:hover { filter: brightness(1.19); }
   .brand-mark svg { width: 19px; }
   .clock-display { display: none; }
   .fullscreen-button { padding: 6px 8px; font-size: 13px; }
-  .dashboard-head { min-height: 72px; }
+  .dashboard-head { min-height: 72px; flex-wrap: wrap; }
+  .head-side { justify-content: flex-start; gap: 7px; }
   .dashboard-head h1 { font-size: 23px; }
   .dashboard-head p { font-size: 11px; }
-  .kpi-strip { grid-template-columns: repeat(2, 1fr); }
-  .ticker-label { padding: 0 9px; font-size: 11px; }
+  .kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .kpi-card { padding: 7px; }
+  .kpi-label { white-space: normal; line-height: 1.25; }
+  .kpi-label svg { display: none; }
+  .kpi-spark { display: none; }
+  .kpi-foot small { text-align: left; }
+  .kpi-value { flex-wrap: wrap; gap: 3px 6px; }
   .connection small { display: none; }
   .connection { padding: 6px 7px; font-size: 11px; }
   .board-grid { grid-template-columns: 1fr; }
   .map-stage { min-height: 270px; }
   .map-panel { padding: 10px; }
-  .survey-list { gap: 6px; }
+  .survey-list { gap: 6px; grid-template-columns: 1fr 1fr; }
+  .four-quads { grid-template-columns: 1fr 1fr; }
   .village-card { padding: 7px; gap: 6px; }
   .village-card-icon { width: 27px; height: 27px; }
   .village-card strong { font-size: 13px; }
@@ -787,4 +744,9 @@ button.level-badge:hover { filter: brightness(1.19); }
   .app-footer { flex-wrap: wrap; }
   .production-grid { grid-template-columns: 1fr; }
   .map-credit { display: inline-block; max-width: 87%; }
+  .detail, .detail-wide, .detail-report { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); }
+  .detail-metrics { grid-template-columns: 1fr 1fr; }
+  .report-head { flex-direction: column; }
+  .report-section { overflow-wrap: anywhere; }
+  .report-sheet .report-table th { white-space: normal; }
 }

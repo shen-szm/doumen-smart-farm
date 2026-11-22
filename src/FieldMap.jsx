@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Crosshair, Minus, Plus } from "@phosphor-icons/react";
+import { Camera, Crosshair, Minus, Plus } from "@phosphor-icons/react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { asset, getJson } from "./data.js";
@@ -11,8 +11,8 @@ const archivedImage = asset("/media/doumen-survey-detail.jpg");
 const satelliteImage = asset("/media/doumen-satellite.webp");
 const aerialPhoto = asset("/media/dahaoyong-aerial.webp");
 const xiaohaoDetail = asset("/media/xiaohai-satellite-detail.webp");
-// 航拍近景切换阈值：Sentinel-2 底图 10 m/像元，再放大就开始发虚。
-const AERIAL_ZOOM = 13.5;
+const AERIAL_ZOOM_START = 13.35;
+const AERIAL_ZOOM_END = 14.5;
 
 export const villages = [
   { id: "dahao", name: "大濠冲村", label: "稻田与排洪渠", map: [.2923, .5874], coordinates: [22.22410, 113.15785],
@@ -31,6 +31,97 @@ export const PILOT_FIELD = Object.freeze({
     [22.2296, 113.1503], [22.2318, 113.1538], [22.2307, 113.1587], [22.2281, 113.1579], [22.2270, 113.1531],
   ],
 });
+
+const closeups = [
+  { id: "dahao", url: aerialPhoto, position: villages[0].coordinates,
+    label: "大濠冲村 · 无人机航拍 · 2026-07-13" },
+  { id: "xiaohao", url: xiaohaoDetail, position: villages[1].coordinates,
+    label: "小濠冲村 · 团队调研卫星截图" },
+];
+
+function ease(value) {
+  const t = Math.max(0, Math.min(1, value));
+  return t * t * (3 - 2 * t);
+}
+
+function bindCloseupReveal(map, frames, motion, onLabel) {
+  const layers = closeups.map((item) => {
+    const frame = frames[item.id];
+    return { ...item, frame, image: frame.firstElementChild };
+  });
+  let selected = null;
+  let caption = null;
+  let zoomTarget = null;
+  let pendingFrame;
+  const geographicOverlays = [
+    map.getPane("markerPane"), map.getPane("tooltipPane"), map.getPane("pilot"),
+    map.getContainer().querySelector(".leaflet-control-scale"),
+  ];
+
+  const update = () => {
+    pendingFrame = undefined;
+    const { zoom, center } = zoomTarget ?? { zoom: map.getZoom(), center: map.getCenter() };
+    const progress = ease((zoom - AERIAL_ZOOM_START) / (AERIAL_ZOOM_END - AERIAL_ZOOM_START));
+    const viewport = map.getSize();
+    const mid = viewport.divideBy(2);
+    const origin = map.project(center, zoom).subtract(mid);
+    const visible = progress > 0 ? layers.flatMap((layer) => {
+      const { image, position } = layer;
+      if (!image.complete || !image.naturalWidth) return [];
+      const point = map.project(position, zoom).subtract(origin);
+      const edge = Math.min(point.x, viewport.x - point.x, point.y, viewport.y - point.y);
+      if (edge < 4) return [];
+      return [{ layer, point, edge, distance: point.distanceTo(mid) }];
+    }) : [];
+    const nearest = visible.reduce((best, entry) => !best || entry.distance < best.distance ? entry : best, null);
+    const active = visible.find(({ layer }) => layer === selected);
+    const target = active && active.distance <= (nearest?.distance ?? Infinity) + 24 ? active : nearest;
+    selected = target?.layer ?? null;
+    const coefficient = progress * ease((target?.edge ?? 0) / Math.max(32, Math.min(viewport.x, viewport.y) * .17));
+    const reveal = motion.matches ? Number(coefficient >= .55) : coefficient;
+    for (const layer of layers) {
+      layer.frame.style.opacity = layer === selected ? reveal : 0;
+      layer.frame.style.transition = motion.matches ? "none" : "opacity .28s ease, clip-path .26s ease-out";
+      if (layer !== selected) continue;
+      const { x, y } = target.point;
+      const extent = Math.hypot(Math.max(x, viewport.x - x), Math.max(y, viewport.y - y)) + 1;
+      const focusRadius = motion.matches ? extent : 30 + (extent - 30) * Math.sqrt(reveal);
+      layer.frame.style.clipPath = `circle(${focusRadius}px at ${x}px ${y}px)`;
+    }
+    // 航拍画面未做正射校正，铺满后隐藏地图标线和尺度，防止把照片当作测绘底图。
+    const coversMap = reveal >= .995;
+    geographicOverlays.forEach((element) => {
+      if (element) element.style.visibility = coversMap ? "hidden" : "";
+    });
+    const nextCaption = reveal > .22 ? selected.label : null;
+    if (nextCaption !== caption) {
+      caption = nextCaption;
+      onLabel(caption);
+    }
+  };
+  const sync = () => { pendingFrame ??= window.requestAnimationFrame(update); };
+  const animate = ({ zoom, center }) => { zoomTarget = { zoom, center }; sync(); };
+  const settle = () => { zoomTarget = null; sync(); };
+  map.on("move zoom resize", sync);
+  map.on("zoomanim", animate);
+  map.on("zoomend moveend", settle);
+  motion.addEventListener("change", sync);
+  layers.forEach(({ image }) => image.addEventListener("load", sync));
+  sync();
+
+  return () => {
+    if (pendingFrame !== undefined) window.cancelAnimationFrame(pendingFrame);
+    map.off("move zoom resize", sync);
+    map.off("zoomanim", animate);
+    map.off("zoomend moveend", settle);
+    motion.removeEventListener("change", sync);
+    layers.forEach(({ frame, image }) => {
+      image.removeEventListener("load", sync);
+      frame.style.opacity = "0";
+    });
+    onLabel(null);
+  };
+}
 
 function addMarker(map, village, point, select) {
   const marker = L.marker(point, {
@@ -51,6 +142,8 @@ export function FieldMap({ onVillage, onMapInfo, onPlot }) {
   const container = useRef(null);
   const map = useRef(null);
   const recenter = useRef(null);
+  const pilot = useRef(null);
+  const aerialFrames = useRef({});
   const callback = useRef(onVillage);
   callback.current = onVillage;
   const plotCallback = useRef(onPlot);
@@ -59,7 +152,7 @@ export function FieldMap({ onVillage, onMapInfo, onPlot }) {
   const [satellite, setSatellite] = useState(null);
   const [mapFallback, setMapFallback] = useState(false);
   const [showPilot, setShowPilot] = useState(true);
-  const [aerialLabels, setAerialLabels] = useState([]);
+  const [aerialLabel, setAerialLabel] = useState(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -78,14 +171,18 @@ export function FieldMap({ onVillage, onMapInfo, onPlot }) {
     const isOnline = mode === "online";
     const isArchive = mode === "archive";
     const canvas = container.current;
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const mapInstance = L.map(canvas, {
       crs: isArchive ? L.CRS.Simple : L.CRS.EPSG3857,
       zoomControl: false, attributionControl: isOnline, scrollWheelZoom: true,
       minZoom: isArchive ? -3 : 9, maxZoom: isArchive ? 1 : isOnline ? 18 : 15,
       zoomSnap: isOnline ? 1 : .25, zoomDelta: isOnline ? 1 : .5,
+      zoomAnimation: !motion.matches, fadeAnimation: !motion.matches,
+      markerZoomAnimation: !motion.matches,
     });
     map.current = mapInstance;
     let fallbackTimer;
+    let stopCloseup;
     if (isOnline) {
       recenter.current = () => mapInstance.setView([22.237, 113.202], 13);
       const tiles = (layer, attribution) => L.tileLayer(
@@ -102,9 +199,9 @@ export function FieldMap({ onVillage, onMapInfo, onPlot }) {
     } else if (!isArchive) {
       const bounds = L.latLngBounds(satellite.bounds);
       recenter.current = () => {
-        // 初始视图以两个调研村为中心放大，可缩小回全区影像。
+        // 初始视野覆盖两村和拟试点地块，缩小可回看全区。
         mapInstance.setMinZoom(Math.min(12, mapInstance.getBoundsZoom(bounds)));
-        const focus = L.latLngBounds(villages.map(({ coordinates }) => coordinates)).pad(1.35);
+        const focus = L.latLngBounds([...villages.map(({ coordinates }) => coordinates), ...PILOT_FIELD.bounds]).pad(1.35);
         const zoom = Math.min(13.25, Math.max(12.6, mapInstance.getBoundsZoom(focus, false) - 0.5));
         mapInstance.setView(focus.getCenter(), zoom, { animate: false });
       };
@@ -112,53 +209,14 @@ export function FieldMap({ onVillage, onMapInfo, onPlot }) {
         alt: "Sentinel-2 斗门区卫星影像", className: "satellite-map-image",
       }).on("error", () => { setMode("archive"); setMapFallback(true); }).addTo(mapInstance);
       mapInstance.setMaxBounds(bounds.pad(0.08));
-      if (showPilot) {
-        L.polygon(PILOT_FIELD.bounds, {
-          color: "#e8c95c", weight: 2, dashArray: "7 5", fillColor: "#e8c95c", fillOpacity: 0.13,
-        }).bindTooltip(PILOT_FIELD.note, { sticky: true, className: "village-name pilot-tip" })
-          .on("click", () => plotCallback.current?.())
-          .addTo(mapInstance);
-      }
-      // 放大到近景（zoom ≥ AERIAL_ZOOM）时，各村高清影像淡入，与卫星底图平滑切换。
-      // 大濠冲用无人机航拍，小濠冲用团队提供的高清卫星截图；锚点按各自村中心，宽度按图片纵横比换算。
-      const aerialLayers = [
-        { url: aerialPhoto, center: L.latLngBounds(PILOT_FIELD.bounds).getCenter(), widthDeg: 0.012, label: "大濠冲 · 无人机航拍近景 · 2026-07-13" },
-        ...villages.filter(({ id }) => id === "xiaohao").map(({ coordinates }) => ({
-          url: xiaohaoDetail, center: L.latLng(coordinates[0], coordinates[1]), widthDeg: 0.009, label: "小濠冲 · 高清卫星影像",
-        })),
-      ];
-      const aerialOverlays = [];
-      const syncAllAerial = () => {
-        const zoom = mapInstance.getZoom();
-        const labels = [];
-        for (const { overlay, label } of aerialOverlays) {
-          const visible = zoom >= AERIAL_ZOOM;
-          const el = overlay.getElement();
-          if (el) el.style.opacity = visible ? "0.96" : "0";
-          if (visible) labels.push(label);
-        }
-        setAerialLabels(labels);
-      };
-      for (const layer of aerialLayers) {
-        const loader = new Image();
-        loader.onload = () => {
-          const latRad = (layer.center.lat * Math.PI) / 180;
-          const widthMeters = layer.widthDeg * 111_320 * Math.cos(latRad);
-          const heightMeters = widthMeters * (loader.naturalHeight / loader.naturalWidth);
-          const dLat = (heightMeters / 2) / 110_950;
-          const dLon = layer.widthDeg / 2;
-          const overlay = L.imageOverlay(layer.url,
-            [[layer.center.lat - dLat, layer.center.lng - dLon], [layer.center.lat + dLat, layer.center.lng + dLon]], {
-              opacity: 0, className: "aerial-overlay", alt: layer.label,
-            }).addTo(mapInstance);
-          aerialOverlays.push({ overlay, label: layer.label });
-          mapInstance.on("zoom", syncAllAerial);
-          syncAllAerial();
-        };
-        loader.src = layer.url;
-      }
+      mapInstance.createPane("pilot").style.zIndex = "410";
+      pilot.current = L.polygon(PILOT_FIELD.bounds, {
+        pane: "pilot", color: "#e8c95c", weight: 2, dashArray: "7 5", fillColor: "#e8c95c", fillOpacity: 0.13,
+      }).bindTooltip(PILOT_FIELD.note, { sticky: true, className: "village-name pilot-tip" })
+        .on("click", () => plotCallback.current?.());
       for (const village of villages) addMarker(mapInstance, village, village.coordinates, (v) => callback.current(v));
       L.control.scale({ imperial: false, maxWidth: 90, position: "bottomright" }).addTo(mapInstance);
+      stopCloseup = bindCloseupReveal(mapInstance, aerialFrames.current, motion, setAerialLabel);
     } else {
       const bounds = [[0, 0], [imageHeight, imageWidth]];
       recenter.current = () => {
@@ -186,34 +244,58 @@ export function FieldMap({ onVillage, onMapInfo, onPlot }) {
     return () => {
       window.clearTimeout(fallbackTimer);
       resize.disconnect();
+      stopCloseup?.();
+      pilot.current = null;
       mapInstance.remove();
       map.current = null;
     };
+  }, [mode, satellite]);
+
+  useEffect(() => {
+    if (pilot.current && map.current && showPilot) pilot.current.addTo(map.current);
+    else pilot.current?.remove();
   }, [mode, satellite, showPilot]);
 
-  return <div className="map-stage">
-    <div className="map-canvas" ref={container} aria-label="斗门区调研地图" />
-    <div className="map-hint" role="status">拖动平移 · 滚轮缩放 · 放大至近景自动切换航拍</div>
-    <div className="map-key"><span className="map-key-dot" /> 村级调研点</div>
-    {mode === "satellite" && showPilot && <button type="button" className="map-key pilot-key pilot-key-button" onClick={() => plotCallback.current?.()}
-      title="查看拟试点地块详情"><i className="pilot-swatch" /> 拟试点地块</button>}
-    {aerialLabels.length > 0 && <div className="aerial-keys">
-      {aerialLabels.map((label) => <div key={label} className="map-key aerial-key">{label}</div>)}
-    </div>}
-    <div className="map-controls" aria-label="地图操作">
-      <button type="button" title="放大" aria-label="放大地图" onClick={() => map.current?.zoomIn()}><Plus size={19} /></button>
-      <button type="button" title="缩小" aria-label="缩小地图" onClick={() => map.current?.zoomOut()}><Minus size={19} /></button>
-      <button type="button" title="复位" aria-label="恢复地图视图" onClick={() => recenter.current?.()}><Crosshair size={19} /></button>
+  function showFieldCloseup() {
+    const instance = map.current;
+    if (!instance) return;
+    const animate = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const zoom = Math.max(AERIAL_ZOOM_END, instance.getZoom());
+    instance.flyTo(closeups[0].position, zoom, { animate, duration: .9 });
+  }
+
+  return <div className="map-view">
+    <div className="map-stage">
+      <div className="map-canvas" ref={container} aria-label="斗门区调研地图" style={{ zIndex: 0 }} />
+      {mode === "satellite" && <div className="aerial-reveal" aria-hidden="true">
+        {closeups.map(({ id, url }) => <div key={id} ref={(node) => { aerialFrames.current[id] = node; }}
+          style={{ position: "absolute", inset: 0, opacity: 0 }}>
+          <img src={url} draggable="false" alt="" />
+        </div>)}
+      </div>}
+      {!aerialLabel && <div className="map-key"><span className="map-key-dot" /> 村级调研点</div>}
+      {!aerialLabel && mode === "satellite" && showPilot && <button type="button" className="map-key pilot-key pilot-key-button" onClick={() => plotCallback.current?.()}
+        title="查看拟试点地块详情"><i className="pilot-swatch" /> 拟试点地块</button>}
+      {aerialLabel && <div className="aerial-reveal-caption" role="status">{aerialLabel}</div>}
+      <div className="map-controls" aria-label="地图操作">
+        <button type="button" title="放大" aria-label="放大地图" onClick={() => map.current?.zoomIn()}><Plus size={19} /></button>
+        <button type="button" title="缩小" aria-label="缩小地图" onClick={() => map.current?.zoomOut()}><Minus size={19} /></button>
+        {mode === "satellite" && satellite && <button type="button" title="农田近景" aria-label="农田近景" onClick={showFieldCloseup}><Camera size={19} /></button>}
+        <button type="button" title="复位" aria-label="恢复地图视图" onClick={() => recenter.current?.()}><Crosshair size={19} /></button>
+      </div>
     </div>
-    <div className="map-provenance">
-      {mode === "satellite" && satellite && <a className="map-credit" href={satellite.sourceUrl} target="_blank" rel="noreferrer">{satellite.attribution}</a>}
-      {mode === "satellite" && <button type="button" aria-pressed={showPilot} onClick={() => setShowPilot(!showPilot)}>
-        {showPilot ? "隐藏试点地块" : "显示试点地块"}
-      </button>}
-      {token && <button type="button" onClick={() => { setMapFallback(false); setMode(mode === "online" ? "satellite" : "online"); }}>
-        {mode === "online" ? "Sentinel-2" : "天地图"}
-      </button>}
-      <button type="button" onClick={onMapInfo}>{mode === "online" ? "天地图影像" : mode === "satellite" ? "影像来源" : mapFallback ? "卫星影像不可用 · 调研地图" : "调研地图"}</button>
+    <div className="map-utility">
+      <p className="map-hint">{aerialLabel ? "缩小或复位可返回卫星图" : mode === "satellite" ? "拖动平移 · 放大查看实拍影像" : "拖动平移 · 滚轮缩放"}</p>
+      <div className="map-provenance">
+        {mode === "satellite" && satellite && <span className="map-credit">{satellite.attribution}</span>}
+        {mode === "satellite" && <button type="button" aria-pressed={showPilot} onClick={() => setShowPilot(!showPilot)}>
+          {showPilot ? "隐藏试点地块" : "显示试点地块"}
+        </button>}
+        {token && <button type="button" onClick={() => { setMapFallback(false); setMode(mode === "online" ? "satellite" : "online"); }}>
+          {mode === "online" ? "Sentinel-2" : "天地图"}
+        </button>}
+        <button type="button" onClick={onMapInfo}>{mode === "online" ? "天地图影像" : mode === "satellite" ? "影像来源" : mapFallback ? "卫星影像不可用 · 调研地图" : "调研地图"}</button>
+      </div>
     </div>
   </div>;
 }

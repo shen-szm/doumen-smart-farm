@@ -53,16 +53,28 @@ const zoom = (featured) => featured ? {
 function Chart({ option, label, className = "" }) {
   const element = useRef(null);
   const chart = useRef(null);
+  const latestOption = useRef(option);
   useEffect(() => {
-    const instance = init(element.current, null, { renderer: "canvas" });
-    chart.current = instance;
-    const observer = new ResizeObserver(() => {
-      if (element.current?.clientWidth && element.current?.clientHeight) instance.resize();
-    });
-    observer.observe(element.current);
-    return () => { observer.disconnect(); instance.dispose(); chart.current = null; };
+    const target = element.current;
+    const fit = () => {
+      if (!target.clientWidth || !target.clientHeight) return;
+      if (chart.current) {
+        chart.current.resize();
+      } else {
+        chart.current = init(target, null, { renderer: "canvas" });
+        chart.current.setOption(latestOption.current, { notMerge: true });
+      }
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(target);
+    return () => { observer.disconnect(); chart.current?.dispose(); chart.current = null; };
   }, []);
-  useEffect(() => { chart.current?.setOption(option, { notMerge: true }); }, [option]);
+  useEffect(() => {
+    if (latestOption.current === option) return;
+    latestOption.current = option;
+    chart.current?.setOption(option, { notMerge: true });
+  }, [option]);
   return <div className={`chart ${className}`} ref={element} role="img" aria-label={label} />;
 }
 
@@ -72,6 +84,25 @@ const line = (name, data, color, other) => ({
   name, type: "line", data, showSymbol: false, connectNulls: false,
   lineStyle: { color, width: 2 }, itemStyle: { color }, ...other,
 });
+
+export function ObservationChart({ hours }) {
+  return <Chart className="detail-chart" label="斗门站逐小时气温与相对湿度" option={{
+    ...base,
+    grid: { left: 44, right: 45, top: 40, bottom: 28 },
+    legend: { data: ["气温", "相对湿度"], textStyle: { color: label } },
+    xAxis: { ...axis, type: "time", axisLabel: { ...axisText, formatter: (value) => formatTime(value, "hour") } },
+    yAxis: [
+      { ...yAxis, type: "value", scale: true, axisLabel: { ...axisText, formatter: "{value}°" } },
+      { ...axis, type: "value", min: 0, max: 100, splitNumber: 4, axisLabel: { ...axisText, formatter: "{value}%" } },
+    ],
+    series: [
+      line("气温", hours.map(({ time, temp }) => [time, temp]), gold,
+        { tooltip: { valueFormatter: (value) => value == null ? "缺测" : `${value} °C` } }),
+      line("相对湿度", hours.map(({ time, humidity }) => [time, humidity]), mint,
+        { yAxisIndex: 1, tooltip: { valueFormatter: (value) => value == null ? "缺测" : `${value}%` } }),
+    ],
+  }} />;
+}
 
 export function ForecastChart({ hours = [], featured = false }) {
   if (!hours.some((point) => point.rain != null || point.probability != null)) {
@@ -101,7 +132,7 @@ export function ForecastChart({ hours = [], featured = false }) {
 
 export function SoilChart({ series = [], featured = false, daily = false }) {
   if (!series.some((point) => point.moisture != null)) return <p className="chart-empty">暂无区域墒情时序</p>;
-  return <Chart className={featured ? "detail-chart" : "soil-chart"} label="9–27 cm 土层体积含水量趋势" option={{
+  return <Chart className={featured ? "detail-chart" : "soil-chart"} label="土壤体积含水量趋势" option={{
     ...base,
     grid: { left: 36, right: 9, top: 8, bottom: 23 },
     xAxis: { ...axis, type: "category", boundaryGap: false, data: daily ? series.map(({ time }) => time.slice(5, 10).replace("-", "/")) : timeNames(series),
