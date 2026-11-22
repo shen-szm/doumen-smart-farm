@@ -34,6 +34,18 @@ export const fieldImages = [
   { id: "planning", file: "/media/dahaoyong-planning-hi.jpg", title: "大濠冲村空间布局专题图", context: "珠海市测绘院 / 广东省地图院 · 2024 年 3 月 · 1:4000", alt: "大濠冲村空间布局专题纸质地图高清翻拍，含彩色地块分区、图例、指北针与比例尺" },
   { id: "tenure", file: "/media/xiaohao-tenure.jpg", title: "小濠冲村土名地界划分初图", context: "村级手绘底图 · 选调生绘制", alt: "小濠冲村传统土名地界手绘地图，标注乌珠咀、大滘围、上帮围、九顷田等位置与虎跳门水道距离" },
   { id: "xiaohao", file: "/media/xiaohai-satellite-detail.webp", title: "小濠冲村影像资料", context: "团队提供的地图影像截图", alt: "小濠冲村居住区与农田的卫星图截图" },
+  { id: "paddy-aerial", file: "/media/field-paddy-aerial.webp", title: "稻田田块航拍", context: "无人机航拍 · 2026-07-13", alt: "大濠冲村稻田田块低空航拍，可见田块分割与田埂走向" },
+  { id: "plots-aerial", file: "/media/field-plots-aerial.webp", title: "菜田条块航拍", context: "无人机航拍 · 2026-07-13", alt: "条块分布的菜田与田埂航拍纹理" },
+  { id: "roads-aerial", file: "/media/field-roads-aerial.webp", title: "连片田块与机耕路", context: "无人机航拍 · 2026-07-13", alt: "连片农田与机耕路航拍，可见排水沟渠走向" },
+  { id: "green-aerial", file: "/media/field-green-aerial.webp", title: "绿肥田块航拍", context: "无人机航拍 · 2026-07-13", alt: "生长中作物的绿色田块与周边裸田对比" },
+  { id: "village-aerial", file: "/media/field-village-aerial.webp", title: "村边耕作与大棚航拍", context: "无人机航拍 · 2026-07-13", alt: "村边农田、大棚与民居相邻分布的航拍" },
+  { id: "panorama-aerial", file: "/media/field-panorama-aerial.webp", title: "大濠冲全景航拍", context: "无人机航拍 · 2026-07-13", alt: "大濠冲村及周边农田、水道的全景航拍" },
+  { id: "houses-aerial", file: "/media/village-houses-aerial.webp", title: "村落民居航拍", context: "无人机航拍 · 2026-07-13", alt: "大濠冲村密集民居屋顶的航拍纹理" },
+  { id: "tower-pond", file: "/media/village-tower-pond.webp", title: "村中碉楼与水塘", context: "团队走访照片 · 2026-07-13", alt: "村中碉楼与门前水塘，历史建筑与村居环境" },
+  { id: "lotus-pond", file: "/media/village-lotus-pond.webp", title: "村口荷塘", context: "团队走访照片 · 2026-07-13", alt: "村口荷塘与绿树、步道" },
+  { id: "walkway", file: "/media/field-walkway.webp", title: "田埂巡查便道", context: "团队走访照片 · 2026-07-13", alt: "稻田间的田埂便道，巡查通行路线" },
+  { id: "hex-well", file: "/media/heritage-hexagonal-well.webp", title: "六角古井", context: "水井走访照片 · 广泰来 / 邝氏宗祠", alt: "六角形石砌古井井口，村中传统水源遗存" },
+  { id: "ancestral-hall", file: "/media/heritage-ancestral-hall.webp", title: "邝氏宗祠门廊", context: "团队走访照片 · 2026-07-13", alt: "邝氏宗祠青砖门廊与石门框" },
 ].map((image) => ({ ...image, file: asset(image.file) }));
 
 export const doumenStatistics = {
@@ -89,7 +101,7 @@ export const villageHighlights = {
   dahao: [
     "连片稻田为主，冬季轮作蔬菜与马铃薯",
     "大庙坑排洪渠承担片区排涝，强降雨前为重点巡查段",
-    "拟试点地块位于西部沿海高速旁（依专题图示意勾绘，待基地确认）",
+    "拟试点地块位于西部沿海高速旁（依据空间布局专题图勾绘）",
     "空间布局专题图由珠海市测绘院 / 广东省地图院 2024 年 3 月编制，比例尺 1:4000",
   ],
   xiaohao: [

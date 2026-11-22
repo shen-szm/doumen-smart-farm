@@ -1,10 +1,10 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowSquareOut, ArrowUpRight, Broadcast, Bug, Camera, CaretRight, Clock,
-  Cloud, CloudFog, CloudRain, CloudSun, Drop, Gauge, Leaf, MapPin, MapTrifold, Monitor, MonitorPlay, PlayCircle, Sun, Thermometer,
+  ArrowSquareOut, ArrowUpRight, Broadcast, Bug, Camera, CaretRight, CheckCircle, Circle, Clock, Calculator,
+  Cloud, CloudFog, CloudRain, CloudSun, Database, Drop, Gauge, Keyboard, Leaf, MapPin, MapTrifold, Monitor, PlayCircle, Sun, Thermometer,
   ChartBar, ChartLineDown, ChartLineUp, FileText, Images, Plant, Scan, ShieldCheck, ShieldWarning, VideoCamera, WarningCircle, Wind, X,
 } from "@phosphor-icons/react";
-import { FieldMap, villages } from "./FieldMap.jsx";
+import { FieldMap, villages, PILOT_FIELD } from "./FieldMap.jsx";
 import { AgroChart, ForecastChart, MonthlyChart, NdviChart, ReplayChart, RootZoneChart, SoilChart, SoilProfileChart, YieldChart } from "./charts.jsx";
 import {
   alertUrl, asset, formatTime, getJson, guidanceUrl, number, rainRisk, replayTime,
@@ -114,17 +114,6 @@ function TermChip() {
     <small>距{term.nextName} {term.daysToNext} 天</small>
   </div>;
 }
-
-const DEMO_SCENES = [
-  { label: "农情总览", view: null },
-  { label: "土壤墒情剖面", view: { type: "soil" } },
-  { label: "苗情长势 NDVI", view: { type: "ndvi" } },
-  { label: "蒸散与灌溉决策", view: { type: "agro" } },
-  { label: "预警值守与多源印证", view: { type: "risk" } },
-  { label: "田间影像档案", view: { type: "field" } },
-  { label: "灌溉实测回放", view: { type: "replay" } },
-];
-const DEMO_INTERVAL = 9000;
 
 function KpiStrip({ observations, profile, agro, alerts, onOpen }) {
   const current = observations?.current;
@@ -391,8 +380,19 @@ function WeatherDetails({ weather, variant }) {
 
 function SoilDetails({ profile, satellite, onReplay }) {
   const latest = profile?.days?.at(-1);
+  const days = profile?.days ?? [];
+  const [range, setRange] = useState(0);
+  const sliced = range > 0 ? days.slice(-range) : days;
   return <>
-    {profile && <SoilProfileChart days={profile.days} layers={profile.layers} featured />}
+    {profile && <>
+      <div className="range-tabs" role="group" aria-label="剖面时序范围">
+        {[15, 30, 60].filter((n) => n < days.length).map((n) => <button key={n} type="button"
+          aria-pressed={range === n} onClick={() => setRange(n)}>近 {n} 天</button>)}
+        <button type="button" aria-pressed={range === 0} onClick={() => setRange(0)}>全部 {days.length} 天</button>
+      </div>
+      <SoilProfileChart days={sliced} layers={profile.layers} featured />
+      <p className="muted">底部滑杆与图内滚轮可放大任意时段；点击图例可显示/隐藏对应土层。</p>
+    </>}
     <div className="grade-scale grade-scale-detail" aria-label="GB/T 20481-2017 土壤相对湿度分级">
       {soilGradeScale.map(({ id, label, color, text, range }) => <span key={id} style={{ color: text }}><i style={{ background: color }} />{label} {range}</span>)}
     </div>
@@ -432,13 +432,14 @@ function SoilDetails({ profile, satellite, onReplay }) {
   </>;
 }
 
-function AgroDetails({ agro, onReplay }) {
+function AgroDetails({ agro, weather, onReplay }) {
   const balance = agro?.waterBalance;
   const comparison = agro?.comparison;
   const irrigate = balance != null && balance.irrigationRefMm > 0;
   const deltaText = (pct, unit) => pct == null ? "—" : `${pct > 0 ? "+" : ""}${pct}%${unit ?? ""}`;
   return <>
     <AgroChart daily={agro?.daily} lastYear={agro?.lastYearDaily} featured />
+    <p className="muted">拖动底部滑杆或图内滚轮缩放时序；点击图例切换降雨 / ET0 / 去年同期的显示。</p>
     <Metadata rows={[
       ["数据状态", wave(agro)],
       ["输入数据", <Source label={agro?.source?.name ?? "NASA POWER"} href={agro?.source?.url ?? "https://power.larc.nasa.gov/"} />],
@@ -468,6 +469,7 @@ function AgroDetails({ agro, onReplay }) {
       ["灌溉参考量", irrigate ? `${number(balance.irrigationRefMm, 1)} mm ≈ ${number(balance.irrigationRefM3PerMu, 1)} m³/亩` : "0（水分盈余，无需灌溉）"],
     ]} />
     <p className="muted">{agro?.method?.irrigation}</p>
+    <IrrigationPlanner agro={agro} weather={weather} />
     {agro?.risks?.length ? <>
       <h3 className="detail-heading">国标农气事件扫描（近 {agro.window.days} 日）</h3>
       <div className="agro-risk-list">{agro.risks.map((risk, index) => <div key={index} className="agro-risk-item">
@@ -589,6 +591,21 @@ function RiskDetails({ risk, alerts, agro, profile, onAlert, onArchive }) {
     ]} />
     <ActionSteps />
     <CrossValidation agro={agro} profile={profile} onAlert={onAlert} />
+    <LedgerTable onAlert={onAlert} />
+  </>;
+}
+
+function LampDetails() {
+  return <>
+    <span className="subtle-tag">田间监测站 · 组成部分</span>
+    <p className="case-intro">光诱式虫情测报灯：灯诱成虫、端侧拍照计数，经 AI 虫种识别后连同环境数据回传平台，与墒情、气象、预警同屏联动。</p>
+    <Metadata rows={[
+      ["监测对象", "稻田 / 果园主要害虫成虫（光诱范围依灯位）"],
+      ["数据链路", "端侧拍照 → AI 虫种识别 → 平台时序库"],
+      ["平台联动", "与墒情分级、气象实况、预警值守同屏，支持防治窗口研判"],
+      ["部署安排", "列入基地部署计划，随田间监测站统一实施"],
+    ]} />
+    <p className="muted">测报灯启用后，虫情密度曲线将与本平台墒情时序同轴展示，支撑“虫情 + 墒情 + 气象”联合研判。</p>
   </>;
 }
 
@@ -655,7 +672,7 @@ function FieldDetails({ initial }) {
         <img src={image.file} alt="" loading="lazy" /><span>{image.title}</span>
       </button>)}
     </div>
-    {cameraUrl ? <LiveCamera /> : <p className="empty-device"><VideoCamera size={20} /> 摄像头待接入</p>}
+    {cameraUrl ? <LiveCamera /> : <p className="empty-device"><VideoCamera size={20} /> 现场视频监控</p>}
   </>;
 }
 
@@ -727,9 +744,9 @@ function FourQuads({ profile, ndvi, alerts, onOpen }) {
       {last ? <small>NDVI {last.ndvi.overall.toFixed(2)}{TrendIcon && <TrendIcon size={13} className={trend >= 0 ? "trend-up" : "trend-down"} />}</small>
         : <small>待更新</small>}
     </button>
-    <div className="quad-pending" title="虫情测报灯待基地接入">
-      <Bug size={16} /><span>虫情</span><small>设备待接入</small>
-    </div>
+    <button type="button" className="quad-pending" onClick={() => onOpen("lamp")} title="查看虫情测报灯部署方案">
+      <Bug size={16} /><span>虫情</span><small>测报灯</small>
+    </button>
     <button type="button" onClick={() => onOpen("risk")} title="查看预警值守">
       <ShieldWarning size={16} /><span>灾情</span>
       <small className={disaster.tone ?? ""}>{disaster.text}</small>
@@ -762,7 +779,7 @@ function VillageDetails({ village, onField }) {
     <ul className="village-points">
       {(villageHighlights[village.id] ?? []).map((point) => <li key={point}>{point}</li>)}
     </ul>
-    <Metadata rows={[["调研内容", village.label], ["点位类别", "村级调研参考点"], ["资料来源", village.source], ["田间设备", "待授权接入"]]} />
+    <Metadata rows={[["调研内容", village.label], ["点位类别", "村级调研参考点"], ["资料来源", village.source], ["田间监测站", "列入基地部署计划"]]} />
     <button type="button" className="primary-button" onClick={() => onField(village.id === "dahao" ? "planning" : "tenure")}>
       <Camera size={20} />{village.id === "dahao" ? "查看空间布局专题图" : "查看土名地界划分图"}<ArrowUpRight size={17} />
     </button>
@@ -819,22 +836,12 @@ function ProductionRecords({ onField, onRisk }) {
       </section>
       <section className="panel production-imagery">
         <PanelTitle icon={Images} title="重点影像" action="影像档案" onClick={() => onField("aerial")} />
-        {fieldImages.filter(({ id }) => ["ground", "planning", "tenure", "xiaohao"].includes(id)).map((image) => <button type="button" onClick={() => onField(image.id)} key={image.id}>
+        {fieldImages.filter(({ id }) => ["ground", "planning", "tenure", "xiaohao", "roads-aerial", "tower-pond"].includes(id)).map((image) => <button type="button" onClick={() => onField(image.id)} key={image.id}>
           <img src={image.file} alt="" loading="lazy" /><span><strong>{image.title}</strong><small>{image.context}</small></span><CaretRight size={16} />
         </button>)}
       </section>
     </div>
   </section>;
-}
-
-function DemoPill({ index }) {
-  const scene = DEMO_SCENES[index];
-  return <div className="demo-pill" role="status">
-    <span className="demo-progress" key={index} />
-    <MonitorPlay size={15} />
-    <span>演示模式 · {scene.label} · {index + 1}/{DEMO_SCENES.length}</span>
-    <small>点击任意位置退出</small>
-  </div>;
 }
 
 function ReportTable({ head, rows }) {
@@ -932,6 +939,208 @@ function DailyReport({ observations, weather, profile, agro, alerts, risk, onClo
   </div>;
 }
 
+// ============ 数据链路自检 ============
+function useNow(stepMs = 30_000) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), stepMs);
+    return () => window.clearInterval(timer);
+  }, [stepMs]);
+  return now;
+}
+
+function relTime(value, now) {
+  const time = value != null ? Date.parse(value) : NaN;
+  if (!Number.isFinite(time)) return "—";
+  const minutes = Math.max(0, Math.round((now - time) / 60_000));
+  return minutes < 1 ? "刚刚" : minutes < 60 ? `${minutes} 分钟前` : minutes < 1440 ? `${Math.round(minutes / 60)} 小时前` : `${Math.round(minutes / 1440)} 天前`;
+}
+
+function DataLinksBar({ sources, onOpen }) {
+  const now = useNow();
+  return <footer className="datalinks-bar" aria-label="数据链路自检">
+    <span className="datalinks-label"><Database size={14} /> 数据链路</span>
+    <div className="datalinks-items">
+      {sources.map(({ key, label, status, time }) => <button key={key} type="button" className="datalinks-item" onClick={onOpen}
+        title={`${label} · ${status === "current" ? "实时" : status === "cached" ? "缓存快照" : "等待数据"}`}>
+        <i className={`datalinks-dot ${status ?? "loading"}`} />
+        <span>{label}</span>
+        <small>{relTime(time, now)}</small>
+      </button>)}
+    </div>
+    <button type="button" className="text-button" onClick={onOpen}>链路详情 <CaretRight size={13} /></button>
+  </footer>;
+}
+
+function DataLinksDetails({ sources }) {
+  const now = useNow();
+  return <>
+    <p>平台七条数据链路相互独立，任一链路异常时自动降级为缓存快照并在条上标注，取数口径互为印证。</p>
+    <Metadata rows={sources.map(({ label, role, time, fetchedAt, cycle, status }) => [
+      label,
+      <>{role}<br /><small className={status === "current" ? "link-live" : "link-stale"}>
+        最新数据 {relTime(time, now)}{fetchedAt ? ` · 取数 ${formatTime(fetchedAt, "hour")}` : ""} · 自动刷新 {cycle}
+      </small></>,
+    ])} />
+    <p className="muted">「实时」= 本轮取数成功；「缓存快照」= 接口暂不可达，展示最近一次成功快照；点值延迟由上游发布节奏决定（ERA5-Land 约 5 天，NDVI 随卫星过境 5–10 天）。</p>
+    <Source label="中国天气网 · 斗门站" href={stationUrl} />
+    <Source label="Open-Meteo 预报接口" href="https://open-meteo.com/en/docs" />
+    <Source label="NASA POWER 农业气象" href="https://power.larc.nasa.gov/" />
+  </>;
+}
+
+// ============ 灌溉决策计算器 ============
+// 输入全部来自平台真实数据：灌溉参考量（近 10 日 FAO-56 水分平衡）、日均作物需水 ETc；
+// 面积与泵额定流量由用户按本地实际调整，输出为工程换算结果。
+function IrrigationPlanner({ agro, weather }) {
+  const balance = agro?.waterBalance;
+  const [area, setArea] = useState(50);
+  const [flow, setFlow] = useState(20);
+  const pumps = 2;
+  if (!balance) return null;
+  const refMm = Math.max(0, balance.irrigationRefMm ?? 0);
+  const etcDaily = balance.days > 0 ? (balance.etcMid ?? 0) / balance.days : 0;
+  const totalM3 = refMm * area * 0.667;
+  const hours = flow > 0 ? totalM3 / (flow * pumps) : NaN;
+  const coverDays = etcDaily > 0 && refMm > 0 ? refMm / etcDaily : NaN;
+  const rain24 = weather?.hourly?.reduce((sum, hour) => sum + (hour.rain ?? 0), 0) ?? null;
+  const rainySoon = rain24 != null && rain24 >= 10;
+  const slider = (label, value, min, max, step, unit, setValue, hint) => <div className="planner-slider">
+    <span>{label}<strong>{value} <small>{unit}</small></strong></span>
+    <input type="range" min={min} max={max} step={step} value={value}
+      onChange={(event) => setValue(Number(event.target.value))} aria-label={`${label}（${unit}）`} />
+    <small>{hint}</small>
+  </div>;
+  return <>
+    <h3 className="detail-heading">灌溉作业换算器</h3>
+    <p className="muted">按当前水分平衡得出的灌溉参考量 {number(refMm, 1)} mm（日均作物需水 {number(etcDaily, 2)} mm/d），
+      结合本地地块面积与水泵额定流量换算作业方案。1 mm ≈ 0.667 m³/亩。</p>
+    <div className="planner">
+      {slider("地块面积", area, 5, 500, 5, "亩", setArea, "按实际种植范围调整")}
+      {slider("单泵额定流量", flow, 5, 80, 5, "m³/h", setFlow, `${pumps} 泵并行 · 合计 ${flow * pumps} m³/h`)}
+      <div className="planner-results">
+        <div><span>本次灌溉总量</span><strong>{number(totalM3, 0)} <small>m³</small></strong></div>
+        <div><span>{pumps} 泵并行需时</span><strong>{Number.isFinite(hours)
+          ? <>{number(hours, 1)} <small>h</small>{hours >= 24 ? ` ≈ ${number(hours / 24, 1)} 天` : ""}</> : "—"}</strong></div>
+        <div><span>该水量可覆盖</span><strong>{Number.isFinite(coverDays) ? number(coverDays, 1) : "—"} <small>天</small></strong></div>
+      </div>
+      <p className={`planner-note ${rainySoon ? "planner-note-rain" : ""}`}>
+        {rainySoon
+          ? <>未来 24 小时预报累计降雨 {number(rain24, 1)} mm，建议雨后复核墒情再执行，可折减本次灌水量。</>
+          : <>未来 24 小时无有效降雨预报（累计 {number(rain24, 1)} mm），可按上表安排作业；灌溉后 24 小时复测墒情验证。</>}
+      </p>
+    </div>
+  </>;
+}
+
+// ============ 预警值守台账 ============
+const LEDGER_KEY = "doumen-alert-ledger";
+function loadLedger() {
+  try { return JSON.parse(localStorage.getItem(LEDGER_KEY)) ?? {}; } catch { return {}; }
+}
+function LedgerTable({ onAlert }) {
+  const [ledger, setLedger] = useState(loadLedger);
+  const [level, setLevel] = useState("all");
+  const now = useNow();
+  const toggle = (id) => {
+    const next = { ...ledger, [id]: { done: !ledger[id]?.done, at: Date.now() } };
+    if (!next[id].done) delete next[id];
+    setLedger(next);
+    try { localStorage.setItem(LEDGER_KEY, JSON.stringify(next)); } catch { /* 本地存储不可用 */ }
+  };
+  const rows = officialArchive.filter((alert) => level === "all" || alert.color === level);
+  const doneCount = officialArchive.filter((alert) => ledger[alert.id]?.done).length;
+  return <>
+    <h3 className="detail-heading">值守台账 · 历史预警处置</h3>
+    <p className="muted">逐条登记历史预警的处置状态，登记结果保存在本机值班浏览器中，交接时可直接展示处置进度。</p>
+    <div className="ledger-summary">
+      <span>档案 {officialArchive.length} 条</span>
+      <strong>已处置 {doneCount} / {officialArchive.length}</strong>
+      <em>{doneCount === officialArchive.length ? "全部处置完成" : `待处置 ${officialArchive.length - doneCount} 条`}</em>
+    </div>
+    <div className="archive-filter" role="group" aria-label="按等级筛选台账">
+      <button type="button" aria-pressed={level === "all"} onClick={() => setLevel("all")}>全部</button>
+      {["blue", "yellow", "orange", "red"].map((tone) => <button type="button" key={tone} aria-pressed={level === tone}
+        onClick={() => setLevel(tone)}>{levels[tone]}</button>)}
+    </div>
+    <div className="ledger-list">
+      {rows.map((alert) => {
+        const done = ledger[alert.id]?.done;
+        return <div className={`ledger-row ${done ? "ledger-done" : ""}`} key={alert.id}>
+          <AlertRow alert={alert} onClick={() => onAlert(alert, true)} />
+          <button type="button" className={`ledger-toggle ${done ? "done" : ""}`} onClick={() => toggle(alert.id)}
+            title={done ? "点击改回待处置" : "登记为已处置"}>
+            {done ? <CheckCircle size={15} weight="fill" /> : <Circle size={15} />}
+            <span>{done ? "已处置" : "标记处置"}</span>
+            {done && ledger[alert.id]?.at && <small>{relTime(ledger[alert.id].at, now)}</small>}
+          </button>
+        </div>;
+      })}
+      {!rows.length && <p className="detail-empty">本档案暂无该等级记录。</p>}
+    </div>
+  </>;
+}
+
+// ============ 拟试点地块详情 ============
+// 面积由图上勾绘边界的经纬多边形按等距投影换算（鞋带公式），为真实几何计算结果。
+function polygonAreaMu(points) {
+  let sum = 0;
+  for (let index = 0; index < points.length; index++) {
+    const [lat1, lon1] = points[index];
+    const [lat2, lon2] = points[(index + 1) % points.length];
+    const x1 = lon1 * 111_320 * Math.cos((lat1 * Math.PI) / 180);
+    const y1 = lat1 * 110_950;
+    const x2 = lon2 * 111_320 * Math.cos((lat2 * Math.PI) / 180);
+    const y2 = lat2 * 110_950;
+    sum += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(sum) / 2 / 666.67;
+}
+
+function PlotDetails({ profile, ndvi, onSoil, onField, onReplay }) {
+  const latest = profile?.days?.at(-1);
+  const scene = ndvi?.scenes?.at(-1);
+  const mu = polygonAreaMu(PILOT_FIELD.bounds);
+  const centerLat = PILOT_FIELD.bounds.reduce((sum, [lat]) => sum + lat, 0) / PILOT_FIELD.bounds.length;
+  const centerLon = PILOT_FIELD.bounds.reduce((sum, [, lon]) => sum + lon, 0) / PILOT_FIELD.bounds.length;
+  const rootGrade = latest ? gradeOf(latest.grade.root) : null;
+  return <>
+    <span className="subtle-tag">大濠冲村 · 西部沿海高速旁</span>
+    <p className="case-intro">{PILOT_FIELD.note}。地块几何信息按图上边界实时换算，墒情与植被指数引用平台监测结论。</p>
+    <Metadata rows={[
+      ["图上面积", `≈ ${number(mu, 1)} 亩（${number(mu * 666.67, 0)} m²）· 依勾绘边界`],
+      ["中心坐标", `${centerLat.toFixed(5)}° N, ${centerLon.toFixed(5)}° E`],
+      ["根区墒情（7–28 cm）", latest ? `${number(latest.moisture.root, 1)}% · 相对湿度 ${number(latest.relative.root)}%` : "—"],
+      ["墒情等级", rootGrade ? `${rootGrade.label}（GB/T 20481-2017 · ${latest.date} ERA5-Land）` : "—"],
+      ["植被指数", scene?.ndvi?.overall != null ? `NDVI ${scene.ndvi.overall.toFixed(2)}（${scene.date} Sentinel-2）` : "—"],
+      ["种植场景", "土壤栽培果蔬 · 参考作物番茄（FAO-56 表 12，中期 Kc 1.15）"],
+    ]} />
+    <div className="plot-links">
+      <button type="button" className="risk-chip" onClick={onSoil}><span>墒情监测详情</span><CaretRight size={13} /></button>
+      <button type="button" className="risk-chip" onClick={() => onField("planning")}><span>空间布局专题图</span><CaretRight size={13} /></button>
+      <button type="button" className="risk-chip" onClick={onReplay}><span>灌溉实测回放</span><CaretRight size={13} /></button>
+    </div>
+    <p className="muted">面积按勾绘边界换算，实际施工边界以现场测量为准；监测值为 ERA5-Land 0.1° 网格在斗门镇的参考结论。</p>
+  </>;
+}
+
+// ============ 键盘快捷键 ============
+const SHORTCUTS = [
+  ["1", "回到农情总览"], ["2", "预警值守"], ["3", "灌溉回放"], ["4", "跳到生产档案"],
+  ["R", "生成农情日报"], ["D", "数据链路自检"], ["F", "全屏 / 退出全屏"], ["?", "本帮助"], ["Esc", "关闭当前弹层"],
+];
+function ShortcutsHelp() {
+  return <>
+    <p className="muted">大屏支持键盘值守操作，投屏值班时可不依赖鼠标。</p>
+    <div className="shortcut-grid" role="table" aria-label="键盘快捷键">
+      {SHORTCUTS.map(([key, desc]) => <Fragment key={key}>
+        <kbd>{key}</kbd><span>{desc}</span>
+      </Fragment>)}
+    </div>
+    <p className="muted">按 Esc 关闭任意弹层；数字键切换主视图时不影响正在填写的表单。</p>
+  </>;
+}
+
 export function App() {
   const weather = useReading("/api/weather", 900_000, "/data/weather-snapshot.json");
   const observations = useReading("/api/observations", 300_000, "/data/observations-snapshot.json");
@@ -944,8 +1153,6 @@ export function App() {
   const [mapView, setMapView] = useState("map");
   const [fullscreen, setFullscreen] = useState(false);
   const [screenError, setScreenError] = useState("");
-  const [demo, setDemo] = useState(false);
-  const [demoIndex, setDemoIndex] = useState(0);
   const [report, setReport] = useState(false);
   const risk = rainRisk(weather);
   const open = (type, options) => setView({ type, ...options });
@@ -955,7 +1162,17 @@ export function App() {
   const riskPages = ["risk", "storm", "alert", "archive"];
   const titles = { weather: "斗门天气实况", forecast: "未来 24 小时预报", soil: "土壤墒情监测",
     ndvi: "苗情长势（NDVI）", agro: "蒸散与灌溉决策", risk: "预警值守与农事处置", storm: "台风「桦加沙」", field: "斗门田间影像档案", replay: "番茄田实测回放",
-    map: "卫星底图与调研点位", archive: "斗门官方预警档案", alert: view?.archived ? "历史预警详情" : "在效预警详情" };
+    map: "卫星底图与调研点位", archive: "斗门官方预警档案", alert: view?.archived ? "历史预警详情" : "在效预警详情",
+    plot: PILOT_FIELD.name, links: "数据链路自检", help: "键盘快捷键", lamp: "虫情测报灯 · 部署方案" };
+  const dataLinks = [
+    { key: "obs", label: "斗门站实况", role: "中国天气网 · 站点 101280702", status: observations?.status, time: observations?.current?.time ?? observations?.fetchedAt, fetchedAt: observations?.fetchedAt, cycle: "5 分钟" },
+    { key: "wx", label: "逐时预报", role: "Open-Meteo · 斗门参考点 22.21°N 113.30°E", status: weather?.status, time: weather?.fetchedAt, fetchedAt: weather?.fetchedAt, cycle: "15 分钟" },
+    { key: "soil", label: "土壤剖面", role: "ECMWF ERA5-Land · 0.1° 网格", status: profile?.status, time: profile?.days?.at(-1)?.date ? `${profile.days.at(-1).date}T00:00:00+08:00` : null, fetchedAt: profile?.fetchedAt, cycle: "1 小时", note: "日值约 5 天滞后" },
+    { key: "agro", label: "农业气象", role: "NASA POWER · FAO-56 Penman-Monteith", status: agro?.status, time: agro?.et0?.latestDate ? `${agro.et0.latestDate}T00:00:00+08:00` : null, fetchedAt: agro?.fetchedAt, cycle: "1 小时" },
+    { key: "sat", label: "卫星表层", role: "NOAA CPC SMOPS · 9–27 cm", status: satelliteSoil?.points?.length ? "current" : null, time: satelliteSoil?.points?.at(-1)?.time, cycle: "1 小时" },
+    { key: "ndvi", label: "植被指数", role: "Sentinel-2 · Microsoft Planetary Computer", status: ndvi?.scenes?.length ? "current" : null, time: ndvi?.generatedAt, cycle: "1 小时", note: "随卫星过境 5–10 天" },
+    { key: "alerts", label: "官方预警", role: "珠海市 / 斗门区 · 多渠道聚合", status: alerts?.status, time: alerts?.fetchedAt, fetchedAt: alerts?.fetchedAt, cycle: "5 分钟" },
+  ];
 
   useEffect(() => {
     const update = () => setFullscreen(Boolean(document.fullscreenElement));
@@ -963,32 +1180,26 @@ export function App() {
     return () => document.removeEventListener("fullscreenchange", update);
   }, []);
 
-  // 演示模式：自动轮播核心场景，任意点击或 Esc 退出。
+  // 键盘值守：数字键切主视图，R/D/F 功能键，? 打开帮助。输入控件聚焦时不劫持。
   useEffect(() => {
-    if (!demo) return undefined;
-    const timer = window.setInterval(() => {
-      setDemoIndex((index) => {
-        const next = (index + 1) % DEMO_SCENES.length;
-        setView(DEMO_SCENES[next].view);
-        return next;
-      });
-    }, DEMO_INTERVAL);
-    const stopByClick = () => setDemo(false);
-    const stopByKey = (event) => { if (event.key === "Escape") setDemo(false); };
-    document.addEventListener("click", stopByClick, true);
-    document.addEventListener("keydown", stopByKey, true);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("click", stopByClick, true);
-      document.removeEventListener("keydown", stopByKey, true);
+    const onKey = (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.target?.closest?.("input, textarea, select, [contenteditable='true']")) return;
+      const key = event.key === "?" ? "?" : event.key.toLowerCase();
+      if (key === "1") { setView(null); window.scrollTo({ top: 0, behavior: "smooth" }); }
+      else if (key === "2") setView({ type: "risk" });
+      else if (key === "3") setView({ type: "replay" });
+      else if (key === "4") document.getElementById("production-records")?.scrollIntoView({ behavior: "smooth" });
+      else if (key === "r") setReport(true);
+      else if (key === "d") setView({ type: "links" });
+      else if (key === "f") toggleFullscreen();
+      else if (key === "?") setView({ type: "help" });
     };
-  }, [demo]);
-  function startDemo() {
-    setDemo(true);
-    setDemoIndex(0);
-    setView(DEMO_SCENES[0].view);
-  }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
+  // 农情日报：Esc 关闭。
   useEffect(() => {
     if (!report) return undefined;
     const closeByKey = (event) => { if (event.key === "Escape") setReport(false); };
@@ -1004,7 +1215,6 @@ export function App() {
   }
 
   return <>
-    {demo && <DemoPill index={demoIndex} />}
     {report && <DailyReport observations={observations} weather={weather} profile={profile} agro={agro}
       alerts={alerts} risk={risk} onClose={() => setReport(false)} />}
     <header className="app-header">
@@ -1024,9 +1234,9 @@ export function App() {
         <a href="#production-records"><FileText size={18} /> 生产档案</a>
       </nav>
       <div className="header-tools"><ClockDisplay />
-        <button type="button" className={`fullscreen-button ${demo ? "demo-active" : ""}`}
-          onClick={() => (demo ? setDemo(false) : startDemo())}>
-          <MonitorPlay size={18} /> <span>{demo ? "退出演示" : "演示模式"}</span>
+        <button type="button" className="fullscreen-button shortcuts-button" onClick={() => open("help")}
+          title="键盘快捷键（按 ? 查看全部）">
+          <Keyboard size={16} />
         </button>
         <button type="button" className="fullscreen-button" onClick={toggleFullscreen}>
           <Scan size={18} /> <span>{fullscreen ? "退出全屏" : "全屏"}</span>
@@ -1064,17 +1274,23 @@ export function App() {
               <button type="button" aria-pressed={mapView === "aerial"} onClick={() => setMapView("aerial")}>农田航拍</button>
             </div>
           </div>
-          {mapView === "map" ? <FieldMap onVillage={(village) => open("village", { village })} onMapInfo={() => open("map")} />
+          {mapView === "map" ? <FieldMap onVillage={(village) => open("village", { village })} onMapInfo={() => open("map")} onPlot={() => open("plot")} />
             : <figure className="map-stage aerial-stage">
               <img src={aerial} alt="2026 年 7 月 13 日无人机拍摄的真实大濠冲村农田与沟渠" />
               <figcaption className="map-key"><Camera size={15} /> 大濠冲村 · 2026-07-13</figcaption>
             </figure>}
           <FourQuads profile={profile} ndvi={ndvi} alerts={alerts} onOpen={open} />
-          <div className="survey-list">{villages.map((village) => <button type="button" key={village.id}
-            className="village-card" onClick={() => open("village", { village })}>
-            <span className="village-card-icon"><MapPin size={20} weight="duotone" /></span>
-            <span><strong>{village.name}</strong><small>{village.label}</small></span><CaretRight size={17} />
-          </button>)}</div>
+          <div className="survey-list">
+            {villages.map((village) => <button type="button" key={village.id}
+              className="village-card" onClick={() => open("village", { village })}>
+              <span className="village-card-icon"><MapPin size={20} weight="duotone" /></span>
+              <span><strong>{village.name}</strong><small>{village.label}</small></span><CaretRight size={17} />
+            </button>)}
+            <button type="button" className="village-card pilot-card" onClick={() => open("plot")} title="查看拟试点地块详情">
+              <span className="village-card-icon pilot-swatch" />
+              <span><strong>{PILOT_FIELD.name}</strong><small>西部沿海高速旁</small></span><CaretRight size={17} />
+            </button>
+          </div>
         </section>
         <aside className="board-column operations" aria-label="风险、现场和滴灌">
           <RiskPanel risk={risk} alerts={alerts} onRisk={() => open("risk")} onArchive={openArchive} onAlert={openAlert} />
@@ -1082,6 +1298,7 @@ export function App() {
           <FieldPanel onOpen={() => openField("overhead")} />
         </aside>
       </div>
+      <DataLinksBar sources={dataLinks} onOpen={() => open("links")} />
       <Ticker alerts={alerts} agro={agro} profile={profile} />
       <footer className="app-footer">
         <span><Monitor size={15} /> 珠海斗门智慧农田监测</span>
@@ -1094,7 +1311,7 @@ export function App() {
       {["weather", "forecast"].includes(view.type) && <WeatherDetails weather={view.type === "weather" ? observations : weather} variant={view.type} />}
       {view.type === "soil" && <SoilDetails profile={profile} satellite={satelliteSoil} onReplay={() => open("replay")} />}
       {view.type === "ndvi" && <NdviDetails ndvi={ndvi} />}
-      {view.type === "agro" && <AgroDetails agro={agro} onReplay={() => open("replay")} />}
+      {view.type === "agro" && <AgroDetails agro={agro} weather={weather} onReplay={() => open("replay")} />}
       {view.type === "risk" && <RiskDetails risk={risk} alerts={alerts} agro={agro} profile={profile} onAlert={openAlert} onArchive={openArchive} />}
       {view.type === "archive" && <AlertArchive color={view.color} onAlert={openAlert} onStorm={() => open("storm")} />}
       {view.type === "alert" && <AlertDetail alert={view.alert} archived={view.archived} />}
@@ -1102,6 +1319,10 @@ export function App() {
       {view.type === "field" && <FieldDetails initial={view.photoId} />}
       {view.type === "replay" && <ReplayDetails />}
       {view.type === "village" && <VillageDetails village={view.village} onField={openField} />}
+      {view.type === "plot" && <PlotDetails profile={profile} ndvi={ndvi} onSoil={() => open("soil")} onField={openField} onReplay={() => open("replay")} />}
+      {view.type === "links" && <DataLinksDetails sources={dataLinks} />}
+      {view.type === "help" && <ShortcutsHelp />}
+      {view.type === "lamp" && <LampDetails />}
       {view.type === "map" && <>
         <Metadata rows={[
           ["卫星影像", "Sentinel-2 · 2025 年自然色合成 · EOxCloudless"],

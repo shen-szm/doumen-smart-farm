@@ -130,22 +130,6 @@ small { font-size: .83em; }
 .term-chip span { color: #9fd8ab; font-variant-numeric: tabular-nums; }
 .term-chip small { color: #7fa98a; font-size: 11px; padding-left: 7px; border-left: 1px solid #3c5c47; }
 
-/* 演示模式 */
-.demo-pill {
-  position: fixed; bottom: 64px; right: 26px; z-index: 1200; display: flex; align-items: center; gap: 9px;
-  background: #10222ee8; border: 1px solid #3f6b85; border-radius: 7px; padding: 9px 13px;
-  color: #cfe6f2; font-size: 13px; box-shadow: 0 4px 18px #0a162266; overflow: hidden;
-}
-.demo-pill svg { color: var(--mint); flex: none; }
-.demo-pill small { color: var(--subtle); font-size: 11px; padding-left: 6px; border-left: 1px solid #3f6b85; }
-.demo-progress {
-  position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; transform-origin: left;
-  background: linear-gradient(90deg, var(--mint), transparent);
-  animation: demo-run 9s linear forwards;
-}
-@keyframes demo-run { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-.fullscreen-button.demo-active { color: #0f2933; background: var(--mint); border-color: var(--mint); }
-
 /* 多源交叉印证 */
 .cross-card { border: 1px solid var(--line); border-radius: 7px; padding: 11px 13px; margin: 10px 0; background: #122430; }
 .cross-date { color: var(--gold); font-size: 13px; font-weight: 650; margin-bottom: 8px; letter-spacing: .03em; }
@@ -157,7 +141,88 @@ small { font-size: .83em; }
 .cross-row span { flex: 1; min-width: 0; }
 .cross-row small { color: var(--subtle); font-size: 11px; white-space: nowrap; }
 button.cross-row:hover span strong { color: var(--mint); }
-@media (prefers-reduced-motion: reduce) { .demo-progress { animation: none; transform: scaleX(1); } }
+
+/* 数据链路自检 */
+.datalinks-bar {
+  display: flex; align-items: center; gap: 14px; margin-top: 12px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 7px 13px;
+}
+.datalinks-label { display: flex; align-items: center; gap: 6px; color: #d5e4ee; font-size: 12.5px; font-weight: 650; flex: none; }
+.datalinks-label svg { color: var(--mint); }
+.datalinks-items { display: flex; flex-wrap: wrap; gap: 4px 6px; flex: 1; min-width: 0; }
+.datalinks-item {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; min-width: 0;
+  border: 1px solid #2b4655; border-radius: 20px; background: #122430; color: #cfe2ee; font-size: 12px;
+}
+.datalinks-item:hover { border-color: #40607a; }
+.datalinks-item small { color: var(--subtle); font-size: 11px; }
+.datalinks-dot { width: 7px; height: 7px; border-radius: 50%; background: #6d8ba0; flex: none; }
+.datalinks-dot.current { background: #58c98a; box-shadow: 0 0 6px rgba(88, 201, 138, .55); }
+.datalinks-dot.cached { background: #e8c95c; }
+.datalinks-dot.unavailable { background: #ef6a5a; }
+.datalinks-dot.loading { animation: link-pulse 1.4s ease-in-out infinite; }
+@keyframes link-pulse { 50% { opacity: .35; } }
+.link-live { color: #7ad3d0; }
+.link-stale { color: var(--subtle); }
+
+/* 灌溉作业换算器 */
+.planner { display: grid; gap: 10px; border: 1px dashed var(--line); border-radius: 8px; padding: 12px 14px; }
+.planner-slider { display: grid; gap: 5px; }
+.planner-slider span { display: flex; justify-content: space-between; align-items: baseline; color: #d5e4ee; font-size: 13px; }
+.planner-slider strong { font-family: var(--number); font-size: 17px; color: var(--mint); }
+.planner-slider strong small { font-size: 11px; color: var(--subtle); }
+.planner-slider input[type="range"] { width: 100%; accent-color: #7ad3d0; cursor: pointer; }
+.planner-slider small { color: var(--subtle); font-size: 11px; }
+.planner-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+.planner-results > div { border: 1px solid var(--line); border-radius: 7px; padding: 8px 11px; background: #122430; }
+.planner-results span { display: block; color: var(--muted); font-size: 11.5px; margin-bottom: 3px; }
+.planner-results strong { font-family: var(--number); font-size: 19px; color: #f2f8fa; }
+.planner-results strong small { font-size: 11px; color: var(--subtle); }
+.planner-note { border-radius: 6px; padding: 8px 11px; font-size: 12.5px; background: rgba(88, 201, 138, .09); color: #9fe3bd; }
+.planner-note-rain { background: rgba(232, 201, 92, .1); color: #f4dd8d; }
+
+/* 预警值守台账 */
+.ledger-summary { display: flex; align-items: center; gap: 12px; margin: 8px 0; font-size: 13px; }
+.ledger-summary strong { color: var(--mint); font-family: var(--number); }
+.ledger-summary em { font-style: normal; color: var(--subtle); }
+.ledger-list { display: grid; gap: 7px; }
+.ledger-row { display: flex; align-items: stretch; gap: 8px; }
+.ledger-row .alert-row { flex: 1; min-width: 0; }
+.ledger-toggle {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; flex: none;
+  width: 74px; border: 1px solid #314b5e; border-radius: 7px; background: #14273a; color: #8aa6b8; font-size: 11px;
+}
+.ledger-toggle:hover { border-color: #40607a; color: #cfe2ee; }
+.ledger-toggle.done { border-color: rgba(88, 201, 138, .55); color: #9fe3bd; background: rgba(88, 201, 138, .1); }
+.ledger-toggle small { font-size: 10px; color: var(--subtle); }
+.ledger-done .alert-row { opacity: .72; }
+
+/* 时段切换 */
+.range-tabs { display: flex; gap: 6px; margin-bottom: 9px; }
+.range-tabs button {
+  border: 1px solid #314b5e; border-radius: 16px; padding: 3px 12px; background: #14273a;
+  color: #cfe2ee; font-size: 12px;
+}
+.range-tabs button:hover { border-color: #40607a; }
+.range-tabs button[aria-pressed="true"] { color: #0f2933; background: var(--mint); border-color: var(--mint); font-weight: 650; }
+
+/* 快捷键帮助 */
+.shortcut-grid { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; align-items: center; margin-block: 10px; }
+.shortcut-grid kbd {
+  display: inline-block; min-width: 34px; text-align: center; padding: 3px 8px;
+  border: 1px solid #3f6b85; border-bottom-width: 2.5px; border-radius: 6px;
+  background: #14273a; color: #d5e4ee; font-family: var(--number); font-size: 12.5px;
+}
+.shortcut-grid span { color: #cfe2ee; font-size: 13px; }
+
+/* 试点地块卡片 */
+.pilot-card { border-style: dashed; }
+.village-card .village-card-icon.pilot-swatch {
+  width: 22px; height: 22px; border-radius: 50%; background: rgba(232, 201, 92, .16);
+  border: 1.5px dashed #e8c95c;
+}
+.pilot-key-button { cursor: pointer; }
+.plot-links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 
 /* 农情日报：白纸公文样式，打印友好 */
 .report-overlay {
@@ -200,7 +265,7 @@ button.cross-row:hover span strong { color: var(--mint); }
 @media print {
   @page { size: A4; margin: 13mm; }
   body { background: #fff; }
-  #root .app-header, #root main, #root .demo-pill { display: none !important; }
+  #root .app-header, #root main { display: none !important; }
   .report-overlay { position: static; display: block; overflow: visible; background: none; animation: none; }
   .report-sheet { width: 100%; padding: 0; box-shadow: none; }
   .report-actions { display: none; }
@@ -215,6 +280,7 @@ button.cross-row:hover span strong { color: var(--mint); }
   height: calc(100dvh - 296px);
 }
 .board-column { display: grid; min-width: 0; min-height: 0; gap: 13px; }
+.board-column .panel { overflow: hidden; }
 .readings { grid-template-rows: minmax(238px, 1.08fr) minmax(212px, .98fr) minmax(158px, .78fr); }
 .operations { grid-template-rows: minmax(262px, 1.2fr) minmax(238px, 1.09fr) auto; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; min-width: 0; min-height: 0; transition: border-color .25s ease; }
@@ -301,6 +367,11 @@ button.cross-row:hover span strong { color: var(--mint); }
 .map-key { top: 13px; left: 13px; border-radius: 5px; padding: 7px 10px; font-size: 13px; display: flex; align-items: center; gap: 7px; }
 .map-key-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #96e4bd; }
 .pilot-key { top: 52px; font-size: 12px; padding: 6px 9px; }
+.pilot-key-button { cursor: pointer; font: inherit; }
+.pilot-key-button:hover { border-color: var(--mint); }
+.aerial-overlay { transition: opacity .7s ease; pointer-events: none; }
+.aerial-keys { position: absolute; z-index: 500; left: 13px; bottom: 44px; display: grid; gap: 4px; }
+.aerial-key { position: static; font-size: 12px; padding: 5px 9px; color: #f0d99a; border-color: #8a6d2f; }
 .pilot-swatch { display: inline-block; width: 14px; height: 9px; border: 1px dashed #e8c95c; background: rgba(232,201,92,.25); border-radius: 2px; }
 .map-provenance { bottom: 12px; left: 13px; display: flex; flex-wrap: wrap; gap: 5px; }
 .map-provenance button { font-size: 11px; padding: 5px 8px; border-radius: 4px; }
@@ -643,10 +714,11 @@ button.level-badge:hover { filter: brightness(1.19); }
   .app-header { min-height: 65px; }
   .dashboard-head { min-height: 44px; padding-block: 4px; }
   .dashboard-head h1 { font-size: 20px; }
-  .board-grid { height: calc(100dvh - 252px); min-height: 700px; }
+  .board-grid { height: auto; min-height: 0; }
   .board-column { gap: 11px; }
-  .readings { grid-template-rows: minmax(228px, 1.05fr) minmax(206px, .95fr) minmax(150px, .72fr); }
-  .operations { grid-template-rows: minmax(250px, 1.15fr) minmax(228px, 1.05fr) auto; }
+  .readings { grid-template-rows: auto auto auto; }
+  .operations { grid-template-rows: auto auto auto; }
+  .soil-chart, .forecast-chart { flex: none; height: 88px; }
   .kpi-strip { gap: 10px; margin-bottom: 9px; }
   .kpi-card { padding: 8px 11px; }
   .kpi-value strong { font-size: clamp(23px, 1.5vw, 29px); }

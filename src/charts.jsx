@@ -2,12 +2,12 @@ import { useEffect, useRef } from "react";
 import { init, use } from "echarts/core";
 import { BarChart, LineChart, PieChart } from "echarts/charts";
 import {
-  AriaComponent, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, VisualMapComponent,
+  AriaComponent, DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, VisualMapComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import { formatTime, replayTime } from "./data.js";
 
-use([BarChart, LineChart, PieChart, AriaComponent, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, VisualMapComponent, CanvasRenderer]);
+use([BarChart, LineChart, PieChart, AriaComponent, DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, VisualMapComponent, CanvasRenderer]);
 
 const mint = "#7ad3d0";
 const blue = "#85abc7";
@@ -32,6 +32,23 @@ const axis = {
   axisLabel: axisText, axisLine: { lineStyle: { color: gridLine } }, axisTick: { show: false },
 };
 const yAxis = { ...axis, splitLine: { lineStyle: { color: gridLine, type: "dashed" } } };
+// featured 大图的时间缩放：底部滑杆 + 图内滚轮/框选，用于细看任意时段。
+// 配套把 grid.bottom 加高约 24px 给滑杆留位（各图表显式声明）。
+const zoom = (featured) => featured ? {
+  dataZoom: [
+    { type: "inside", start: 0, end: 100, zoomOnMouseWheel: true },
+    {
+      type: "slider", height: 15, bottom: 4, start: 0, end: 100,
+      borderColor: gridLine, backgroundColor: "#12222e",
+      fillerColor: "rgba(122,211,208,.14)",
+      handleStyle: { color: "#2c4a5e", borderColor: mint },
+      moveHandleStyle: { color: "#2c4a5e" },
+      dataBackground: { lineStyle: { color: "#3f6b85" }, areaStyle: { color: "rgba(63,107,133,.14)" } },
+      selectedDataBackground: { lineStyle: { color: mint }, areaStyle: { color: "rgba(122,211,208,.18)" } },
+      textStyle: { color: label, fontSize: 10 },
+    },
+  ],
+} : {};
 
 function Chart({ option, label, className = "" }) {
   const element = useRef(null);
@@ -115,8 +132,9 @@ export function RootZoneChart({ days = [], fieldCapacity = 0.30, featured = fals
     ...base,
     animationDuration: 1600,
     animationEasing: "quadraticOut",
+    ...zoom(featured),
     visualMap: { show: false, type: "piecewise", dimension: 1, pieces, seriesIndex: 0 },
-    grid: { left: 36, right: 10, top: 8, bottom: 23 },
+    grid: { left: 36, right: 10, top: 8, bottom: featured ? 47 : 23 },
     xAxis: { ...axis, type: "category", boundaryGap: false, data: dayNames(series),
       axisLabel: { ...axisText, interval: Math.max(0, Math.floor(series.length / 4) - 1) } },
     yAxis: { ...yAxis, type: "value", scale: true, splitNumber: 3, axisLabel: { ...axisText, formatter: "{value}%" } },
@@ -142,12 +160,13 @@ export function SoilProfileChart({ days = [], layers = [], featured = false }) {
     ...base,
     animationDuration: 1500,
     animationEasing: "quadraticOut",
+    ...zoom(featured),
     legend: {
       top: 0, left: 32, itemWidth: 14, itemHeight: 8, icon: "roundRect",
       textStyle: { color: label, fontSize: 11 },
       data: layers.map(({ label }) => label),
     },
-    grid: { left: 36, right: 10, top: 26, bottom: 23 },
+    grid: { left: 36, right: 10, top: 26, bottom: featured ? 50 : 23 },
     xAxis: { ...axis, type: "category", boundaryGap: false, data: dayNames(usable),
       axisLabel: { ...axisText, interval: Math.max(0, Math.floor(usable.length / 5) - 1) } },
     yAxis: { ...yAxis, type: "value", scale: true, splitNumber: 3, axisLabel: { ...axisText, formatter: "{value}%" } },
@@ -167,12 +186,13 @@ export function AgroChart({ daily = [], lastYear = [], featured = false }) {
   const hasLastYear = lastYear.length === usable.length && lastYear.some(({ et0 }) => et0 != null);
   return <Chart className={featured ? "detail-chart" : "agro-chart"} label="日降雨量与参考蒸散量对比" option={{
     ...base,
+    ...zoom(featured),
     legend: {
       top: 0, left: 32, itemWidth: 14, itemHeight: 8, icon: "roundRect",
       textStyle: { color: label, fontSize: 11 },
       data: ["日降雨量", "参考蒸散 ET0", ...(hasLastYear ? ["去年同期 ET0"] : [])],
     },
-    grid: { left: 38, right: 36, top: 26, bottom: 24 },
+    grid: { left: 38, right: 36, top: 26, bottom: featured ? 48 : 24 },
     xAxis: { ...axis, type: "category", data: usable.map(({ date }) => date.slice(5, 10).replace("-", "/")),
       axisLabel: { ...axisText, interval: Math.max(0, Math.floor(usable.length / 8) - 1) } },
     yAxis: [
@@ -208,11 +228,12 @@ export function NdviChart({ scenes = [], featured = false }) {
     ...base,
     animationDuration: 1500,
     animationEasing: "quadraticOut",
+    ...zoom(featured),
     legend: {
       top: 0, left: 32, itemWidth: 14, itemHeight: 8, icon: "roundRect",
       textStyle: { color: label, fontSize: 11 }, data: series.map(({ name }) => name),
     },
-    grid: { left: 40, right: 14, top: 26, bottom: 24 },
+    grid: { left: 40, right: 14, top: 26, bottom: featured ? 48 : 24 },
     xAxis: { ...axis, type: "category", boundaryGap: false, data: scenes.map(({ date }) => date.slice(5, 10).replace("-", "/")),
       axisLabel: { ...axisText, interval: Math.max(0, Math.floor(scenes.length / 5) - 1) } },
     yAxis: { ...yAxis, type: "value", min: 0, max: 0.7, splitNumber: 3 },
