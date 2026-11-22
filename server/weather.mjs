@@ -15,8 +15,10 @@ forecastUrl.search = new URLSearchParams({
   precipitation_unit: 'mm',
   current: 'temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_gusts_10m,weather_code',
   hourly: `temperature_2m,precipitation,precipitation_probability,wind_gusts_10m,${SOIL_FIELD}`,
+  daily: 'temperature_2m_min,temperature_2m_max,precipitation_sum,precipitation_probability_max,wind_gusts_10m_max,et0_fao_evapotranspiration,weather_code',
   past_hours: '48',
   forecast_hours: '25',
+  forecast_days: '8',
 });
 
 export const emptyWeather = Object.freeze({
@@ -26,6 +28,7 @@ export const emptyWeather = Object.freeze({
   fetchedAt: null,
   current: null,
   hourly: [],
+  daily: [],
   soil: [],
 });
 
@@ -47,8 +50,9 @@ export function normalizeWeather(payload, fetchedAt) {
     throw new Error('Incomplete Open-Meteo response');
   }
 
-  const { current, hourly } = payload;
+  const { current, hourly, daily } = payload;
   const time = chinaTime(current.time);
+  const localDate = time.slice(0, 10);
   const reference = fetchedAt.getTime();
   const rows = hourly.time.map((value, index) => {
     const time = chinaTime(value);
@@ -81,6 +85,19 @@ export function normalizeWeather(payload, fetchedAt) {
       probability: numberOrNull(hourly.precipitation_probability?.[index]),
       gust: numberOrNull(hourly.wind_gusts_10m?.[index]),
     })),
+    daily: Array.isArray(daily?.time) ? daily.time.flatMap((date, index) => {
+      if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || date <= localDate) return [];
+      return [{
+        date,
+        minTemp: numberOrNull(daily.temperature_2m_min?.[index]),
+        maxTemp: numberOrNull(daily.temperature_2m_max?.[index]),
+        precipitation: numberOrNull(daily.precipitation_sum?.[index]),
+        probability: numberOrNull(daily.precipitation_probability_max?.[index]),
+        gust: numberOrNull(daily.wind_gusts_10m_max?.[index]),
+        et0: numberOrNull(daily.et0_fao_evapotranspiration?.[index]),
+        code: numberOrNull(daily.weather_code?.[index]),
+      }];
+    }).slice(0, 7) : [],
     soil: history.map(({ time, index }) => {
       const value = numberOrNull(hourly[SOIL_FIELD]?.[index]);
       return { time, moisture: value === null ? null : Number((value * 100).toFixed(2)) };

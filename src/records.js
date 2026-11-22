@@ -79,11 +79,11 @@ export const quarterlyAgriculture = {
 };
 
 export const localReferences = [
-  { title: "莲洲镇高标准农田巡查", context: "珠海 · 莲洲镇石龙村", summary: "高标准农田试点将机耕路、沟渠与低洼地块纳入常态巡护。现场记录可按路线整理，便于追溯沟渠淤塞和路基隐患。",
-    url: "https://pub-zhtb.hizh.cn/a/202609/07/AP6a9e8737e4b0858d47771e69.html", source: "珠海当地报道" },
-  { title: "斗门地表水监测月报", context: "2026 年 9 月 · 地表水监测",
-    summary: "磨刀门水道珠海大桥断面为Ⅱ类，虎跳门水道西炮台断面为Ⅲ类，两处监测断面均达标。",
-    url: "https://www.doumen.gov.cn/zdlyxxgk/hjbhxxgk/szhj/content/post_3958737.html", source: "珠海市生态环境局斗门分局" },
+  { title: "莲洲镇高标准农田管护", context: "2026-11-16 · 试点进展", summary: "5 个村庄约 600 亩高标准农田纳入管护试点，已处置沟渠堵塞等 5 处隐患。公开报道显示，隐患处置周期缩短至 48 小时以内。",
+    url: "https://www.doumen.gov.cn/zhsdmqrmzfmhwz/sy/zwdt/zjdt/content/post_3959805.html", source: "斗门区政府门户" },
+  { title: "斗门镇排涝工程", context: "2026-10-22 · 环评首次公示",
+    summary: "拟新建 9 座外排泵站，包含小濠涌、大庙坑泵站，并重建 1 座泵站和 4 座水闸。",
+    url: "https://www.zhuhai.gov.cn/xw/gsgg/content/post_3951841.html", source: "珠海市政府门户" },
   { title: "蔬菜防灾减灾技术指导", context: "农业农村与农技推广资料",
     summary: "巡查田间排水沟，检查沟渠与排水口，做好抽排准备。风雨结束后查积水、支架与棚体，记录影响范围。",
     url: "https://www.agri.cn/zx/nyyw/202606/t20260618_8845501.htm", source: "中国农业农村信息网" },
