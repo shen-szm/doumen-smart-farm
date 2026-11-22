@@ -1,0 +1,26 @@
+{
+  "bounds": [
+    [
+      22.075,
+      113.02
+    ],
+    [
+      22.355,
+      113.425
+    ]
+  ],
+  "projection": "EPSG:3857",
+  "boundsProjection": "EPSG:4326",
+  "source": "EOxCloudless Sentinel-2",
+  "sourceUrl": "https://cloudless.eox.at/",
+  "vintage": 2025,
+  "attribution": "EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2025)",
+  "license": "CC BY-NC-SA 4.0",
+  "licenseUrl": "https://cloudless.eox.at/license-non-commercial",
+  "requestUrl": "https://tiles.maps.eox.at/map?service=WMS&request=GetMap&version=1.1.1&layers=s2cloudless-2025_3857&styles=default&srs=EPSG%3A3857&bbox=12581328.849455778%2C2520532.2647749702%2C12626413.243227053%2C2554200.9338289388&width=2048&height=1529&format=image%2Fjpeg",
+  "dimensions": [
+    2048,
+    1529
+  ],
+  "encoding": "Regional WMS raster saved as WebP, with original extent and colors."
+}

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.zcode-site/
+.pages-tmp/
+.env
+.env.local
+.env.*.local

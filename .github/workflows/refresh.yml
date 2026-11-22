@@ -1,0 +1,45 @@
+name: 刷新数据并发布
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"  # 每 3 小时刷新气象/墒情/蒸散/实况
+    - cron: "0 4 * * 1"    # 每周一 04:00 UTC 增量刷新 NDVI
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: 刷新气象 / 实况 / 墒情 / 蒸散快照（单项失败保留旧快照）
+        run: |
+          node scripts/refresh-data.mjs --weather       || echo "::warning::weather refresh failed"
+          node scripts/refresh-data.mjs --observations  || echo "::warning::observations refresh failed"
+          node scripts/refresh-data.mjs --soil          || echo "::warning::soil refresh failed"
+          node scripts/refresh-data.mjs --agro          || echo "::warning::agro refresh failed"
+
+      - name: 增量刷新 NDVI（每周一调度与手动触发）
+        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 4 * * 1'
+        run: node scripts/refresh-ndvi.mjs || echo "::warning::ndvi refresh failed"
+
+      - name: 构建（GitHub Pages 子路径）
+        run: npx vite build --base=/doumen-smart-farm/
+
+      - name: SPA 404 回退页
+        run: cp dist/client/index.html dist/client/404.html
+
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: dist/client
+          commit_message: "数据刷新 ${{ github.run_id }}"
