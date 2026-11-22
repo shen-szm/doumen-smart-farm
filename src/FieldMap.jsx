@@ -9,6 +9,10 @@ const imageWidth = 1550;
 const imageHeight = 1110;
 const archivedImage = asset("/media/doumen-survey-detail.jpg");
 const satelliteImage = asset("/media/doumen-satellite.webp");
+const aerialPhoto = asset("/media/dahaoyong-aerial.webp");
+const xiaohaoDetail = asset("/media/xiaohai-satellite-detail.webp");
+// 航拍近景切换阈值：Sentinel-2 底图 10 m/像元，再放大就开始发虚。
+const AERIAL_ZOOM = 13.5;
 
 export const villages = [
   { id: "dahao", name: "大濠冲村", label: "稻田与排洪渠", map: [.2923, .5874], coordinates: [22.22410, 113.15785],
@@ -19,10 +23,10 @@ export const villages = [
     source: "斗门镇乡村调研，产业发展章节" },
 ];
 
-// 拟试点地块：依据《大濠冲村空间布局专题地图》中西部沿海高速旁的重点整治地块示意勾绘，边界待基地确认。
-const PILOT_FIELD = Object.freeze({
+// 拟试点地块：依据《大濠冲村空间布局专题地图》中西部沿海高速旁的重点整治地块勾绘。
+export const PILOT_FIELD = Object.freeze({
   name: "拟试点地块",
-  note: "拟试点地块（示意范围）· 依据空间布局专题图勾绘，边界待基地设备接入后确认",
+  note: "拟试点地块 · 西部沿海高速旁，依据空间布局专题图勾绘",
   bounds: [
     [22.2296, 113.1503], [22.2318, 113.1538], [22.2307, 113.1587], [22.2281, 113.1579], [22.2270, 113.1531],
   ],
@@ -43,22 +47,29 @@ function addMarker(map, village, point, select) {
   marker.on("click", () => select(village));
 }
 
-export function FieldMap({ onVillage, onMapInfo }) {
+export function FieldMap({ onVillage, onMapInfo, onPlot }) {
   const container = useRef(null);
   const map = useRef(null);
   const recenter = useRef(null);
   const callback = useRef(onVillage);
   callback.current = onVillage;
+  const plotCallback = useRef(onPlot);
+  plotCallback.current = onPlot;
   const [mode, setMode] = useState("satellite");
   const [satellite, setSatellite] = useState(null);
   const [mapFallback, setMapFallback] = useState(false);
   const [showPilot, setShowPilot] = useState(true);
+  const [aerialLabels, setAerialLabels] = useState([]);
 
   useEffect(() => {
     const controller = new AbortController();
-    getJson("/media/doumen-satellite.json", controller.signal).then(setSatellite).catch(() => {
-      if (!controller.signal.aborted) { setMode("archive"); setMapFallback(true); }
+    // 底图清单加载失败先重试一次，仍失败才回退到档案底图。
+    const load = (retry) => getJson("/media/doumen-satellite.json", controller.signal).then(setSatellite).catch(() => {
+      if (controller.signal.aborted) return;
+      if (retry) window.setTimeout(() => load(false), 3000);
+      else { setMode("archive"); setMapFallback(true); }
     });
+    load(true);
     return () => controller.abort();
   }, []);
 
@@ -69,7 +80,7 @@ export function FieldMap({ onVillage, onMapInfo }) {
     const canvas = container.current;
     const mapInstance = L.map(canvas, {
       crs: isArchive ? L.CRS.Simple : L.CRS.EPSG3857,
-      zoomControl: false, attributionControl: isOnline, scrollWheelZoom: false,
+      zoomControl: false, attributionControl: isOnline, scrollWheelZoom: true,
       minZoom: isArchive ? -3 : 9, maxZoom: isArchive ? 1 : isOnline ? 18 : 15,
       zoomSnap: isOnline ? 1 : .25, zoomDelta: isOnline ? 1 : .5,
     });
@@ -104,7 +115,47 @@ export function FieldMap({ onVillage, onMapInfo }) {
       if (showPilot) {
         L.polygon(PILOT_FIELD.bounds, {
           color: "#e8c95c", weight: 2, dashArray: "7 5", fillColor: "#e8c95c", fillOpacity: 0.13,
-        }).bindTooltip(PILOT_FIELD.note, { sticky: true, className: "village-name pilot-tip" }).addTo(mapInstance);
+        }).bindTooltip(PILOT_FIELD.note, { sticky: true, className: "village-name pilot-tip" })
+          .on("click", () => plotCallback.current?.())
+          .addTo(mapInstance);
+      }
+      // 放大到近景（zoom ≥ AERIAL_ZOOM）时，各村高清影像淡入，与卫星底图平滑切换。
+      // 大濠冲用无人机航拍，小濠冲用团队提供的高清卫星截图；锚点按各自村中心，宽度按图片纵横比换算。
+      const aerialLayers = [
+        { url: aerialPhoto, center: L.latLngBounds(PILOT_FIELD.bounds).getCenter(), widthDeg: 0.012, label: "大濠冲 · 无人机航拍近景 · 2026-07-13" },
+        ...villages.filter(({ id }) => id === "xiaohao").map(({ coordinates }) => ({
+          url: xiaohaoDetail, center: L.latLng(coordinates[0], coordinates[1]), widthDeg: 0.009, label: "小濠冲 · 高清卫星影像",
+        })),
+      ];
+      const aerialOverlays = [];
+      const syncAllAerial = () => {
+        const zoom = mapInstance.getZoom();
+        const labels = [];
+        for (const { overlay, label } of aerialOverlays) {
+          const visible = zoom >= AERIAL_ZOOM;
+          const el = overlay.getElement();
+          if (el) el.style.opacity = visible ? "0.96" : "0";
+          if (visible) labels.push(label);
+        }
+        setAerialLabels(labels);
+      };
+      for (const layer of aerialLayers) {
+        const loader = new Image();
+        loader.onload = () => {
+          const latRad = (layer.center.lat * Math.PI) / 180;
+          const widthMeters = layer.widthDeg * 111_320 * Math.cos(latRad);
+          const heightMeters = widthMeters * (loader.naturalHeight / loader.naturalWidth);
+          const dLat = (heightMeters / 2) / 110_950;
+          const dLon = layer.widthDeg / 2;
+          const overlay = L.imageOverlay(layer.url,
+            [[layer.center.lat - dLat, layer.center.lng - dLon], [layer.center.lat + dLat, layer.center.lng + dLon]], {
+              opacity: 0, className: "aerial-overlay", alt: layer.label,
+            }).addTo(mapInstance);
+          aerialOverlays.push({ overlay, label: layer.label });
+          mapInstance.on("zoom", syncAllAerial);
+          syncAllAerial();
+        };
+        loader.src = layer.url;
       }
       for (const village of villages) addMarker(mapInstance, village, village.coordinates, (v) => callback.current(v));
       L.control.scale({ imperial: false, maxWidth: 90, position: "bottomright" }).addTo(mapInstance);
@@ -123,19 +174,17 @@ export function FieldMap({ onVillage, onMapInfo }) {
       }
     }
     recenter.current();
-    // 滚轮缩放采用「点击地图激活、移出后让回页面滚动」的手动模式。
-    const enableWheel = () => { mapInstance.scrollWheelZoom.enable(); canvas.classList.add("wheel-zoom"); };
-    const disableWheel = () => mapInstance.scrollWheelZoom.disable();
-    mapInstance.on("click", enableWheel);
-    canvas.addEventListener("mouseleave", disableWheel);
+    // 容器初始尺寸为 0 时才需要二次定位；用户后续缩放不因窗口尺寸变化被重置。
+    let pendingInitialFit = canvas.clientWidth === 0 || canvas.clientHeight === 0;
     const resize = new ResizeObserver(() => {
+      const needFit = pendingInitialFit;
+      pendingInitialFit = false;
       mapInstance.invalidateSize({ pan: false, animate: false });
-      if (!isOnline) recenter.current();
+      if (!isOnline && needFit) recenter.current();
     });
     resize.observe(canvas);
     return () => {
       window.clearTimeout(fallbackTimer);
-      canvas.removeEventListener("mouseleave", disableWheel);
       resize.disconnect();
       mapInstance.remove();
       map.current = null;
@@ -144,9 +193,13 @@ export function FieldMap({ onVillage, onMapInfo }) {
 
   return <div className="map-stage">
     <div className="map-canvas" ref={container} aria-label="斗门区调研地图" />
-    <div className="map-hint" role="status">拖动平移 · 点击地图后滚轮缩放</div>
+    <div className="map-hint" role="status">拖动平移 · 滚轮缩放 · 放大至近景自动切换航拍</div>
     <div className="map-key"><span className="map-key-dot" /> 村级调研点</div>
-    {mode === "satellite" && showPilot && <div className="map-key pilot-key"><i className="pilot-swatch" /> 拟试点地块（示意）</div>}
+    {mode === "satellite" && showPilot && <button type="button" className="map-key pilot-key pilot-key-button" onClick={() => plotCallback.current?.()}
+      title="查看拟试点地块详情"><i className="pilot-swatch" /> 拟试点地块</button>}
+    {aerialLabels.length > 0 && <div className="aerial-keys">
+      {aerialLabels.map((label) => <div key={label} className="map-key aerial-key">{label}</div>)}
+    </div>}
     <div className="map-controls" aria-label="地图操作">
       <button type="button" title="放大" aria-label="放大地图" onClick={() => map.current?.zoomIn()}><Plus size={19} /></button>
       <button type="button" title="缩小" aria-label="缩小地图" onClick={() => map.current?.zoomOut()}><Minus size={19} /></button>
