@@ -13,12 +13,21 @@ export const officialArchive = [
     description: "斗门区气象台发布全区各镇街暴雨红色预警信号。", url: cap + "hsyj/20260727/t20260727_527731695.html" },
   { id: "20260725-orange", title: "雷雨大风橙色预警", color: "orange", area: "斗门区各镇街", startsAt: "2026-07-25T17:00:00+08:00",
     description: "斗门区气象台发布各街镇雷雨大风橙色预警信号。", url: cap + "csyj/20260725/t20260725_527729295.html" },
+  { id: "20260520-red", title: "暴雨红色预警", color: "red", area: "斗门区", startsAt: "2026-05-20T15:15:00+08:00",
+    issuer: "珠海市气象台", description: "受雷雨云团持续影响，斗门区暴雨预警信号升级为红色。",
+    url: "https://pub-zhtb.hizh.cn/s/202605/20/AP6a0d60a5e4b0b8294c63ded1.html" },
   { id: "20250924-blue", title: "台风蓝色预警", color: "blue", area: "珠海全市（含斗门）", startsAt: "2025-09-24T21:30:00+08:00",
     issuer: "珠海市气象局", description: "台风「桦加沙」远离后，珠海市气象局将全市台风预警下调为蓝色。",
     url: "https://pub-zhtb.hizh.cn/a/202509/24/AP68d3f5b1e4b082260c2e2e7a.html" },
 ].map((record) => ({ issuer: "斗门区气象台", ...record }));
 
 export const levels = { red: "红色", orange: "橙色", yellow: "黄色", blue: "蓝色", white: "白色" };
+
+export const rainfallRecord = {
+  window: "2026-05-19 19:00 至 2026-05-20 19:00",
+  amount: 555.3,
+  url: "https://www.yantian.gov.cn/ytaqscddglj/gkmlpt/content/12/12804/post_12804711.html",
+};
 
 export function alertTone(alert) {
   if (Object.hasOwn(levels, alert?.color)) return alert.color;
@@ -57,6 +66,15 @@ export const doumenStatistics = {
     { label: "蔬菜产量", value: "8.61", unit: "万吨", growth: "−1.9%" },
     { label: "水果产量", value: "1.68", unit: "万吨", growth: "+9.5%" },
     { label: "种植业产值", value: "6.45", unit: "亿元" },
+  ],
+};
+
+export const quarterlyAgriculture = {
+  url: "https://www.doumen.gov.cn/zhsdmqrmzfmhwz/zwgk/tjxx/content/post_3956387.html",
+  results: [
+    ["农林牧渔业总产值", "71.12", "+7.0%"],
+    ["渔业", "55.12", "+9.6%"],
+    ["农林牧渔专业及辅助性活动", "9.54", "+7.0%"],
   ],
 };
 

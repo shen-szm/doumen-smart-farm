@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fetchOfficialAlerts, unavailableAlerts } from './alerts.mjs';
-import { emptyObservations, fetchObservations } from './observations.mjs';
+import { emptyHistory, emptyObservations, fetchCurrentObservation, fetchObservationHistory } from './observations.mjs';
 import { emptyWeather, fetchRegionalWeather } from './weather.mjs';
 import { emptySoilProfile, fetchSoilProfile } from './soil.mjs';
 import { emptyAgro, fetchAgro } from './agro.mjs';
@@ -53,8 +53,22 @@ export function createApiMiddleware({ env = process.env, fetcher = fetch, now = 
   );
   const alerts = cachedRequest(() => fetchOfficialAlerts(env, fetcher, now), 5 * MINUTE, () => unavailableAlerts, now);
   const observations = cachedRequest(
-    () => fetchObservations(fetcher, now), 10 * MINUTE,
-    (previous) => previous?.current ? { ...previous, status: 'cached' } : emptyObservations,
+    () => fetchCurrentObservation(fetcher, now), 10 * MINUTE,
+    (previous) => {
+      if (previous?.current) return { ...previous, status: 'cached' };
+      const snapshot = readSnapshot('observations-snapshot.json', emptyObservations, (value) => value.current?.time);
+      const { status, source, location, fetchedAt, current } = snapshot;
+      return { status, source, location, fetchedAt, current };
+    },
+    now,
+  );
+  const observationHistory = cachedRequest(
+    () => fetchObservationHistory(fetcher, now), 10 * MINUTE,
+    (previous) => {
+      if (previous?.history?.length) return { ...previous, historyStatus: 'cached' };
+      const snapshot = readSnapshot('observations-snapshot.json', null, (value) => value.history?.length);
+      return snapshot ? { ...emptyHistory, history: snapshot.history, historyStatus: 'cached' } : emptyHistory;
+    },
     now,
   );
   const soilProfile = cachedRequest(
@@ -71,7 +85,10 @@ export function createApiMiddleware({ env = process.env, fetcher = fetch, now = 
   );
   const routes = new Map([
     ['/api/weather', weather],
-    ['/api/observations', observations],
+    ['/api/observations', async () => {
+      const [current, history] = await Promise.all([observations(), observationHistory()]);
+      return { ...current, ...history };
+    }],
     ['/api/soil-profile', soilProfile],
     ['/api/agro', agro],
     ['/api/alerts', async () => {

@@ -122,7 +122,9 @@ const tasks = [];
 if (!options.length || options.includes('--observations')) {
   tasks.push(fetchObservations().then(async (observations) => {
     if (!observations.current?.time) throw new Error('Observation snapshot is missing the current record');
-    await writeDataset('observations-snapshot.json', { ...observations, status: 'cached' });
+    await writeDataset('observations-snapshot.json', {
+      ...observations, status: 'cached', historyStatus: observations.history.length ? 'cached' : 'unavailable',
+    });
     console.log(`Observation snapshot ${observations.fetchedAt}, station time ${observations.current.time}`);
   }));
 }
