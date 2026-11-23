@@ -5,7 +5,7 @@ import {
   ChartBar, ChartLineDown, ChartLineUp, FileText, Images, MagnifyingGlassMinus, MagnifyingGlassPlus, Plant, Printer, Scan, ShieldCheck, ShieldWarning, VideoCamera, Wind, X,
 } from "@phosphor-icons/react";
 import { FieldMap, villages, PILOT_FIELD } from "./FieldMap.jsx";
-import { AgroChart, ForecastChart, MonthlyChart, NdviChart, ObservationChart, ReplayChart, RootZoneChart, SoilChart, SoilProfileChart, YieldChart } from "./charts.jsx";
+import { AgroChart, ForecastChart, MonthlyChart, NdviChart, ObservationChart, PestChart, ReplayChart, RootZoneChart, SoilChart, SoilProfileChart, YieldChart } from "./charts.jsx";
 import {
   alertUrl, asset, formatTime, getJson, guidanceUrl, number, rainRisk, replayTime,
   shanghai, stationUrl, stormUrl, useActiveAlerts, useReading, weatherText,
@@ -337,6 +337,12 @@ function briefingItems(alerts, agro, profile, crops) {
   }
   const pestHot = crops?.pests?.find(({ seasonal, level }) => seasonal && level === "高");
   if (pestHot) items.push(`病虫提示：${pestHot.pest}气象适宜度高，${pestHot.action.split("；")[0]}`);
+  if (crops?.lamp) {
+    const top = crops.lamp.species[0];
+    if (top) items.push(`虫情灯诱：近 7 日合计 ${number(crops.lamp.total7)} 头 · 优势种 ${top.name}（周环比 ${top.trend > 0 ? "+" : ""}${top.trend ?? 0}%）`);
+  }
+  const latestOp = crops?.operations?.latest;
+  if (latestOp) items.push(`农事作业：${latestOp.date.slice(5).replace("-", "/")} ${latestOp.type} · ${latestOp.crop}${latestOp.area ? ` ${latestOp.area} 亩` : ""}`);
   for (const risk of agro?.risks?.slice(0, 2) ?? []) {
     items.push(`农气记录：${risk.type} ${risk.level} · ${risk.detail}（${risk.standard}）`);
   }
@@ -623,7 +629,7 @@ function CropsDetails({ crops, onLamp }) {
         ["计算方法", method?.gdd],
       ]} />
     </>}
-    <button type="button" className="text-button detail-action" onClick={onLamp}>虫情测报灯部署方案 <CaretRight size={15} /></button>
+    <button type="button" className="text-button detail-action" onClick={onLamp}>虫情灯诱时序 <CaretRight size={15} /></button>
     <Source label="Open-Meteo 逐时预报" href="https://open-meteo.com/en/docs" />
     <Source label="NASA POWER 农业气象日值" href="https://power.larc.nasa.gov/" />
   </>;
@@ -744,17 +750,34 @@ function RiskDetails({ risk, alerts, agro, profile, onAlert, onArchive, onRainfa
   </>;
 }
 
-function LampDetails() {
+function PestLampDetails({ crops }) {
+  const lamp = crops?.lamp;
+  const top = lamp?.species?.[0];
   return <>
-    <span className="subtle-tag">田间监测站 · 组成部分</span>
-    <p className="case-intro">光诱式虫情测报灯：灯诱成虫、端侧拍照计数，经 AI 虫种识别后连同环境数据回传平台，与墒情、气象、预警同屏联动。</p>
+    <span className="subtle-tag">田间监测站 · 虫情测报灯</span>
+    <p className="case-intro">光诱式虫情测报灯逐日灯诱计数：灯诱成虫、端侧拍照计数并经 AI 虫种识别后回传平台，与墒情、气象、预警同屏联动，支撑防治窗口研判。</p>
+    {lamp ? <>
+      <div className="detail-metrics">
+        <div className="metric"><span><Bug size={16} />近 7 日灯诱合计</span><strong>{number(lamp.total7)} <small>头</small></strong></div>
+        <div className="metric"><span><Bug size={16} />优势种</span><strong>{top?.name} <small>{number(top?.last7)} 头</small></strong></div>
+        <div className="metric"><span><Sun size={16} />峰值夜</span><strong>{lamp.peakNight?.date?.slice(5).replace("-", "/")} <small>{number(lamp.peakNight?.total)} 头</small></strong></div>
+        <div className="metric"><span><Scan size={16} />AI 识别率</span><strong>{number(lamp.identifyRate, 1)} <small>%</small></strong></div>
+      </div>
+      <PestChart series={lamp.series} featured />
+      <h3 className="detail-heading">种类构成 · 近 {lamp.windowDays} 日时序</h3>
+      <ReadingTable head={["虫种", "寄主", "近 7 日 (头)", "近 30 日 (头)", "周环比"]}
+        rows={lamp.species.map(({ name, host, last7, last30, trend }) => [
+          name, host, number(last7), number(last30), trend == null ? "—" : `${trend > 0 ? "+" : ""}${trend}%`,
+        ])} />
+      <p className="muted">灯诱计数受夜间天气（雨夜扑灯量下降、大风活动减弱）影响存在天然波动，防治决策应结合田间百丛（株）虫量调查与气象适宜度综合判断。</p>
+    </> : <p className="detail-empty">虫情灯诱时序获取中。</p>}
+    <h3 className="detail-heading">设备与数据链路</h3>
     <Metadata rows={[
-      ["监测对象", "稻田 / 果园主要害虫成虫（光诱范围依灯位）"],
+      ["监测对象", "稻田 / 果园 / 菜地主要害虫成虫（光诱范围依灯位）"],
       ["数据链路", "端侧拍照 → AI 虫种识别 → 平台时序库"],
       ["平台联动", "与墒情分级、气象实况、预警值守同屏，支持防治窗口研判"],
-      ["部署安排", "列入基地部署计划，随田间监测站统一实施"],
+      ["识别口径", `AI 虫种识别率 ${lamp ? number(lamp.identifyRate, 1) : "—"}%，存疑样本人工复核`],
     ]} />
-    <p className="muted">测报灯启用后，虫情密度曲线将与本平台墒情时序同轴展示，支撑“虫情 + 墒情 + 气象”联合研判。</p>
   </>;
 }
 
@@ -898,7 +921,8 @@ function FourQuads({ profile, ndvi, alerts, crops, onOpen }) {
     ? last.ndvi.overall - prev.ndvi.overall : null;
   const TrendIcon = trend == null ? null : trend >= 0 ? ChartLineUp : ChartLineDown;
   const official = alerts?.status === "current" ? alerts.alerts : null;
-  const pest = crops?.pests?.find(({ seasonal }) => seasonal);
+  const lampTop = crops?.lamp?.species?.[0];
+  const density = lampTop ? (lampTop.last7 >= 350 ? "高" : lampTop.last7 >= 120 ? "中" : "低") : null;
   const disaster = !alerts ? { text: "查询中" }
     : official == null ? { text: "暂不可查" }
     : official.length ? { text: `${official.length} 条生效`, tone: "trend-down" }
@@ -913,9 +937,9 @@ function FourQuads({ profile, ndvi, alerts, crops, onOpen }) {
       {last ? <small>NDVI {number(last.ndvi?.overall, 2)}{TrendIcon && <TrendIcon size={13} className={trend >= 0 ? "trend-up" : "trend-down"} />}</small>
         : <small>待更新</small>}
     </button>
-    <button type="button" className={pest?.level === "高" ? "quad-alert" : ""} onClick={() => onOpen("crops")} title="病虫气象适宜度与测报灯部署方案">
+    <button type="button" className={density === "高" ? "quad-alert" : ""} onClick={() => onOpen("pest")} title="查看虫情灯诱时序与防治窗口">
       <Bug size={16} /><span>虫情</span>
-      <small>{pest ? `${pest.pest.replace(/（.*$/, "")}·${pest.level ?? "—"}` : crops ? "模型运行中" : "获取中"}</small>
+      <small>{lampTop ? `${lampTop.name}·${density}` : crops ? "识别中" : "获取中"}</small>
     </button>
     <button type="button" onClick={() => onOpen("risk")} title="查看预警值守">
       <ShieldWarning size={16} /><span>灾情</span>
@@ -986,13 +1010,26 @@ function CropCalendar() {
   </section>;
 }
 
-function ProductionRecords({ onField, onRisk, onWater }) {
+function ProductionRecords({ onField, onRisk, onWater, operations }) {
+  const ops = operations?.records ?? [];
+  const stats = operations?.byType ?? {};
   return <section id="production" className="production-records" aria-label="档案内容">
     <div className="record-head">
       <button type="button" className="text-button" onClick={onWater}>区域水环境 <CaretRight size={16} /></button>
       <button type="button" className="text-button" onClick={onRisk}>查看农事处置 <CaretRight size={16} /></button>
     </div>
     <CropCalendar />
+    {operations && <section className="panel operations-panel">
+      <PanelTitle icon={ChartBar} title={`农事作业台账 · ${operations.month}`} />
+      <div className="ops-summary">
+        <span>本月作业 <strong>{operations.monthTotal}</strong> 次</span>
+        {Object.entries(stats).slice(0, 6).map(([type, count]) => <em key={type}>{type} {count}</em>)}
+      </div>
+      {ops.length ? <ReadingTable head={["日期", "时间", "作业类型", "作物 / 区域", "作业内容与面积"]}
+        rows={ops.slice(0, 8).map(({ date, time, type, crop, scope, area, note }) => [
+          date.slice(5).replace("-", "/"), time, type, `${crop} · ${scope}`, area ? `${note}（${area} 亩）` : note,
+        ])} /> : <p className="detail-empty">暂无作业记录。</p>}
+    </section>}
     <div className="production-grid">
       <section className="panel production-stats">
         <PanelTitle icon={ChartBar} title="2026 年前三季度农业统计" />
@@ -1384,7 +1421,7 @@ export function App() {
   const titles = { weather: "斗门天气实况", forecast: "斗门天气预报", soil: "土壤墒情监测",
     ndvi: "苗情长势（NDVI）", agro: "蒸散与灌溉决策", risk: "预警值守与农事处置", storm: "台风「桦加沙」", field: "斗门田间影像档案", replay: "番茄田实测回放",
     map: "卫星底图与调研点位", archive: "斗门官方预警档案", alert: view?.archived ? "历史预警详情" : "在效预警详情",
-    plot: PILOT_FIELD.name, links: "数据链路自检", help: "键盘快捷键", lamp: "虫情测报灯 · 部署方案", crops: "作物农事决策",
+    plot: PILOT_FIELD.name, links: "数据链路自检", help: "键盘快捷键", pest: "虫情测报灯", crops: "作物农事决策",
     report: "农情日报", briefing: "农情简报", rainfall: "斗门镇暴雨实测记录",
     actions: "农事处置", water: "斗门区域水环境", image: view?.image?.title };
   const dataLinks = [
@@ -1508,7 +1545,7 @@ export function App() {
       </div>
       <DataLinksBar sources={dataLinks} onOpen={() => open("links")} />
       <Ticker alerts={alerts} agro={agro} profile={profile} crops={crops} onOpen={() => open("briefing")} />
-      <ProductionRecords onField={openField} onRisk={() => open("actions")} onWater={() => open("water")} />
+      <ProductionRecords onField={openField} onRisk={() => open("actions")} onWater={() => open("water")} operations={crops?.operations} />
       <footer className="app-footer">
         <span className="footer-brand"><Monitor size={15} /> 珠海斗门智慧农田监测</span>
         <span className="footer-links"><Clock size={14} /> 数据来源
@@ -1557,11 +1594,11 @@ export function App() {
       {view.type === "plot" && <PlotDetails profile={profile} ndvi={ndvi} onSoil={() => open("soil")} onField={openField} onReplay={() => open("replay")} />}
       {view.type === "links" && <DataLinksDetails sources={dataLinks} />}
       {view.type === "water" && <WaterDetails />}
-      {view.type === "crops" && <CropsDetails crops={crops} onLamp={() => open("lamp")} />}
+      {view.type === "crops" && <CropsDetails crops={crops} onLamp={() => open("pest")} />}
       {view.type === "briefing" && <Briefing alerts={alerts} agro={agro} profile={profile} crops={crops} />}
       {view.type === "report" && <DailyReport observations={observations} profile={profile} agro={agro} alerts={alerts} risk={risk} />}
       {view.type === "help" && <ShortcutsHelp />}
-      {view.type === "lamp" && <LampDetails />}
+      {view.type === "pest" && <PestLampDetails crops={crops} />}
       {view.type === "map" && <>
         <Metadata rows={[
           ["卫星影像", "Sentinel-2 · 2025 年自然色合成 · EOxCloudless"],

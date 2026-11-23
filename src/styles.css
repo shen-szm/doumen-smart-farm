@@ -678,6 +678,10 @@ body:has(.detail[open]) { overflow: hidden; }
 .village-points { margin: 10px 0 4px; padding-left: 20px; }
 .village-points li { color: #c9d7e4; font-size: 13.5px; line-height: 1.6; margin-bottom: 6px; }
 .record-head { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 12px; margin-bottom: 8px; }
+.operations-panel { padding: 17px; margin-bottom: 15px; }
+.ops-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 10px; font-size: 12.5px; color: var(--muted); }
+.ops-summary span strong { color: #d5e4ee; font-size: 15px; margin: 0 2px; }
+.ops-summary em { font-style: normal; border: 1px solid #2b4655; background: #122430; border-radius: 20px; padding: 3px 10px; color: #cfe2ee; font-size: 12px; }
 .production-grid { display: grid; grid-template-columns: 1fr 1.15fr .9fr; gap: 15px; }
 .production-grid > section { padding: 17px; }
 .statistics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin-bottom: 9px; }

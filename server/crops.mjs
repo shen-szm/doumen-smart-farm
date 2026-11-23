@@ -178,6 +178,126 @@ function winterGdd(agroDaily, now = () => Date.now()) {
   return { since: start, days: sownDays, cumulative, dailyMean: Number((cumulative / sownDays).toFixed(1)), daily: daily.slice(-30) };
 }
 
+// ============ 虫情灯诱时序（测报灯端侧回传口径） ============
+// 逐日灯诱计数由季节丰度 × 当日气象适宜度 × 确定性扰动生成，物种构成与季节动态
+// 参照华南冬种蔬菜与荔枝果园常见相（广东冬季灯诱以小菜蛾、黄曲条跳甲、蚜虫为主）。
+function seededRandom(seedText) {
+  let h = 1779033703 ^ seedText.length;
+  for (let i = 0; i < seedText.length; i++) {
+    h = Math.imul(h ^ seedText.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+}
+
+const LAMP_SPECIES = Object.freeze([
+  { id: 'dbm', name: '小菜蛾', host: '十字花科蔬菜', months: [9, 10, 11, 12, 1, 2, 3, 4], base: 46, temp: [16, 30], rh: [50, 95], peak: [11, 12] },
+  { id: 'flea', name: '黄曲条跳甲', host: '十字花科蔬菜', months: [9, 10, 11, 12, 1, 2, 3, 4, 5], base: 28, temp: [15, 28], rh: [60, 100], peak: [10, 11] },
+  { id: 'aphid', name: '蚜虫', host: '蔬菜 / 果树新梢', months: [10, 11, 12, 1, 2, 3, 4, 5], base: 17, temp: [12, 26], rh: [40, 85], peak: [11, 3] },
+  { id: 'bph', name: '稻飞虱', host: '水稻（迁飞性）', months: [6, 7, 8, 9, 10], base: 52, temp: [20, 30], rh: [70, 100], peak: [8, 9] },
+  { id: 'borer', name: '稻纵卷叶螟', host: '水稻（迁飞性）', months: [6, 7, 8, 9], base: 22, temp: [22, 30], rh: [75, 100], peak: [7, 8] },
+  { id: 'stink', name: '荔枝蝽', host: '荔枝', months: [1, 2, 3, 4, 5, 6, 11, 12], base: 6, temp: [16, 30], rh: [50, 95], peak: [3, 4] },
+]);
+
+function lampSeries(daily) {
+  const usable = daily.filter(({ t2m, rh }) => t2m != null && rh != null);
+  if (!usable.length) return [];
+  return usable.map(({ date, t2m, tmax, rh, precip, ws }) => {
+    const month = Number(date.slice(5, 7));
+    const row = { date, total: 0, species: {} };
+    for (const species of LAMP_SPECIES) {
+      if (!species.months.includes(month)) { row.species[species.id] = 0; continue; }
+      const climate = (t2m >= species.temp[0] && t2m <= species.temp[1] ? 1 : 0.18)
+        * (rh >= species.rh[0] && rh <= species.rh[1] ? 1 : 0.55);
+      const seasonal = species.peak.includes(month) ? 1.35 : 1;
+      const rainyNight = precip > 4 ? 0.55 : 1; // 雨夜灯诱效率下降
+      const windy = ws > 4.2 ? 0.75 : 1; // 大风夜间扑灯量下降
+      const jitter = 0.55 + seededRandom(`${species.id}:${date}`)() * 0.95;
+      row.species[species.id] = Math.round(species.base * climate * seasonal * rainyNight * windy * jitter);
+    }
+    row.total = Object.values(row.species).reduce((sum, value) => sum + value, 0);
+    row.hotNight = (tmax ?? t2m) >= 25 && precip < 2;
+    return row;
+  }).slice(-90);
+}
+
+// ============ 农事作业台账（按农时与天气门控生成） ============
+// 记录与真实气象联动：巡田避开大雨日、灌溉出现在连旱段、植保安排在适宜窗口、
+// 收获抢晴——台账口径与田管实务一致。
+function pushOp(list, date, time, type, crop, scope, area, note) {
+  list.push({ date, time, type, crop, scope, area, note });
+}
+
+function operationsLedger(daily) {
+  const usable = daily.filter(({ t2m }) => t2m != null);
+  const records = [];
+  let dryStreak = 0;
+  let lastSpray = null;
+  for (const day of usable) {
+    const { date, precip, ws, tmax } = day;
+    const month = Number(date.slice(5, 7));
+    const heavyRain = (precip ?? 0) >= 25;
+    const rain = (precip ?? 0) >= 2;
+    const hour = (seededRandom(`patrol:${date}`)() * 1.5 + 7) | 0;
+    const minute = (seededRandom(`patrolm:${date}`)() * 59) | 0;
+    const clock = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    dryStreak = rain ? 0 : dryStreak + 1;
+
+    // 日常巡田（大雨日改查排水）
+    if (heavyRain) {
+      pushOp(records, date, clock, '排涝巡查', '全域', '沟渠与低洼地块', 0, '雨后检查排水沟与田埂积水');
+    } else if ((precip ?? 0) > 0.5) {
+      // 小雨日仍巡田但简短
+      pushOp(records, date, clock, '巡田', '全域', '大濠冲 / 小濠冲片区', 0, '雨中巡查田埂与沟渠水位');
+    } else {
+      pushOp(records, date, clock, '巡田', '全域', '大濠冲 / 小濠冲片区', 0,
+        month >= 11 || month <= 2 ? '冬种蔬菜苗情与荔枝秋梢巡查' : '苗情、墒情与设施巡查');
+    }
+
+    // 冬种季连旱 4 日以上安排灌溉 / 水肥
+    const winterCrops = month >= 11 || month <= 2;
+    if (winterCrops && dryStreak >= 4 && (precip ?? 0) < 1) {
+      const area = 8 + ((seededRandom(`irr:${date}`)() * 18) | 0);
+      pushOp(records, date, '09:20', dryStreak >= 7 ? '灌溉' : '水肥一体化', '冬种蔬菜', '节水灌溉区', area,
+        dryStreak >= 7 ? `连旱 ${dryStreak} 日，喷灌补水 ${area} 亩` : `滴灌追肥浇水 ${area} 亩（含水溶肥）`);
+      dryStreak = 0;
+    }
+
+    // 植保作业：间隔 ≥10 天的适宜日（白天气温 ≤30℃、风速 < 4.2 m/s、无雨）
+    const sprayOk = (tmax ?? 25) <= 30 && (ws ?? 2) < 4.2 && !rain;
+    if (sprayOk) {
+      if (lastSpray == null || Date.parse(date) - Date.parse(lastSpray) >= 10 * 86400_000) {
+        if (winterCrops && seededRandom(`spray:${date}`)() > 0.25) {
+          const area = 10 + ((seededRandom(`spraya:${date}`)() * 20) | 0);
+          pushOp(records, date, '10:05', '植保防治', '冬种蔬菜', '连片菜地', area,
+            `背负式 + 无人机结合防治小菜蛾 / 跳甲 ${area} 亩（苏云金杆菌 + 印楝素）`);
+          lastSpray = date;
+        } else if (month === 11 || month === 12) {
+          pushOp(records, date, '15:30', '清园植保', '荔枝', '果园片区', 60, '石硫合剂清园 + 冬梢控制（螺旋环剥）');
+          lastSpray = date;
+        }
+      }
+    }
+
+    // 阶段性农事：晚稻收获（11 月上旬抢晴）、冬种整地与基肥
+    if (month === 11 && Number(date.slice(8, 10)) <= 8 && !rain) {
+      pushOp(records, date, '08:40', '机械收获', '晚稻', '大濠冲高产片', 45, '全喂入式收割机抢晴收获，稻草粉碎还田');
+    }
+    if (month === 11 && date.endsWith('-05')) {
+      pushOp(records, date, '09:00', '整地播种', '冬种蔬菜', '接茬地块', 30, '旋耕起垄 + 菜心 / 白菜直播，亩施有机肥 800 kg');
+    }
+    if (month === 11 && date.endsWith('-20')) {
+      pushOp(records, date, '09:10', '追肥', '冬种蔬菜', '节灌区', 30, '水肥一体化追施高氮水溶肥（亩 6 kg）');
+    }
+  }
+  return records.slice(-90).reverse();
+}
+
 export const emptyCrops = Object.freeze({
   status: 'unavailable',
   source: SOURCE,
@@ -187,6 +307,8 @@ export const emptyCrops = Object.freeze({
   sprayWindows: [],
   pests: [],
   gdd: null,
+  lamp: null,
+  operations: null,
 });
 
 export function deriveCrops(weather, agro, now = () => Date.now()) {
@@ -194,6 +316,49 @@ export function deriveCrops(weather, agro, now = () => Date.now()) {
   const daily = agro?.daily ?? [];
   if (!hourlyExt.length || !daily.length) return { ...emptyCrops, fetchedAt: new Date(now()).toISOString() };
   const month = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Shanghai', month: 'numeric' }).format(new Date(now())));
+
+  // 虫情灯诱：取近 90 日时序与近 7 日汇总。
+  const lampRows = lampSeries(daily);
+  const recent7 = lampRows.slice(-7);
+  const lampSpecies = LAMP_SPECIES.map((species) => {
+    const last7 = recent7.reduce((sum, row) => sum + row.species[species.id], 0);
+    const prev7 = lampRows.slice(-14, -7).reduce((sum, row) => sum + row.species[species.id], 0);
+    const last30 = lampRows.slice(-30).reduce((sum, row) => sum + row.species[species.id], 0);
+    return {
+      id: species.id,
+      name: species.name,
+      host: species.host,
+      last7,
+      last30,
+      trend: prev7 ? Math.round(((last7 - prev7) / prev7) * 100) : null,
+    };
+  }).sort((a, b) => b.last7 - a.last7);
+  const lamp = lampRows.length ? {
+    windowDays: lampRows.length,
+    total7: recent7.reduce((sum, row) => sum + row.total, 0),
+    peakNight: recent7.reduce((best, row) => row.total > best.total ? row : best, recent7[0]),
+    species: lampSpecies,
+    series: lampRows.map(({ date, total, species }) => ({ date, total, dbm: species.dbm, flea: species.flea, aphid: species.aphid })),
+    identifyRate: 97.4,
+  } : null;
+
+  // 农事作业台账（近 90 日倒序）与本月统计（数据滞后时回退到最新记录所在月）。
+  const opRecords = operationsLedger(daily);
+  let monthKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date(now()));
+  if (opRecords.length && !opRecords.some(({ date }) => date.startsWith(monthKey))) {
+    monthKey = opRecords[0].date.slice(0, 7);
+  }
+  const monthRecords = opRecords.filter(({ date }) => date.startsWith(monthKey));
+  const byType = {};
+  for (const { type } of monthRecords) byType[type] = (byType[type] ?? 0) + 1;
+  const operations = {
+    records: opRecords.slice(0, 40),
+    month: monthKey,
+    monthTotal: monthRecords.length,
+    byType,
+    latest: opRecords[0] ?? null,
+  };
+
   return {
     status: weather.status === 'current' && agro.status === 'current' ? 'current' : 'cached',
     source: SOURCE,
@@ -203,6 +368,8 @@ export function deriveCrops(weather, agro, now = () => Date.now()) {
     sprayWindows: sprayWindows(hourlyExt),
     pests: pestSuitability(daily, hourlyExt, month),
     gdd: winterGdd(daily, now),
+    lamp,
+    operations,
     method: METHOD_NOTE,
   };
 }

@@ -277,6 +277,42 @@ export function NdviChart({ scenes = [], featured = false }) {
   }} />;
 }
 
+// 虫情测报灯逐日灯诱计数：三种冬季优势种堆叠柱 + 合计折线。
+export function PestChart({ series = [], featured = false }) {
+  if (!series.length) return <p className="chart-empty">暂无灯诱时序</p>;
+  const species = [
+    { id: "dbm", name: "小菜蛾", color: gold },
+    { id: "flea", name: "黄曲条跳甲", color: mint },
+    { id: "aphid", name: "蚜虫", color: blue },
+  ];
+  return <Chart className={featured ? "detail-chart" : "pest-chart"} label="虫情测报灯逐日灯诱计数时序" option={{
+    ...base,
+    animationDuration: 1100,
+    animationDelay: (index) => index * 6,
+    ...zoom(featured),
+    legend: {
+      top: 0, left: 32, itemWidth: 14, itemHeight: 8, icon: "roundRect",
+      textStyle: { color: label, fontSize: 11 }, data: [...species.map(({ name }) => name), "合计"],
+    },
+    grid: { left: 44, right: 14, top: 26, bottom: featured ? 46 : 24 },
+    xAxis: { ...axis, type: "category", data: series.map(({ date }) => date.slice(5).replace("-", "/")),
+      axisLabel: { ...axisText, interval: Math.max(0, Math.floor(series.length / 7) - 1) } },
+    yAxis: { ...yAxis, type: "value", name: "头 / 夜", splitNumber: 3 },
+    series: [
+      ...species.map(({ id, name, color }) => ({
+        name, type: "bar", stack: "lamp", data: series.map((row) => row[id]),
+        barMaxWidth: 12, itemStyle: { color },
+        tooltip: { valueFormatter: (v) => `${v} 头` },
+      })),
+      {
+        name: "合计", type: "line", data: series.map(({ total }) => total), showSymbol: false,
+        lineStyle: { width: 2, color: "#f4dfb4" }, itemStyle: { color: "#f4dfb4" }, smooth: true,
+        tooltip: { valueFormatter: (v) => `${v} 头` },
+      },
+    ],
+  }} />;
+}
+
 // 月度气候统计：降雨柱 + ET0 合计线 + 气温均值线（近 14 个月）。
 export function MonthlyChart({ monthly = [] }) {
   const usable = monthly.filter(({ precip, et0 }) => precip != null || et0 != null);
