@@ -4,6 +4,7 @@ import { emptyHistory, emptyObservations, fetchCurrentObservation, fetchObservat
 import { emptyWeather, fetchRegionalWeather } from './weather.mjs';
 import { emptySoilProfile, fetchSoilProfile } from './soil.mjs';
 import { emptyAgro, fetchAgro } from './agro.mjs';
+import { deriveCrops, emptyCrops } from './crops.mjs';
 
 const MINUTE = 60 * 1000;
 
@@ -83,6 +84,13 @@ export function createApiMiddleware({ env = process.env, fetcher = fetch, now = 
       : readSnapshot('agro-snapshot.json', emptyAgro, (snapshot) => snapshot.daily?.length && snapshot.fetchedAt),
     now,
   );
+  // 作物决策由已缓存的逐时预报 + 农业气象日值派生，随两者新鲜度联动。
+  const crops = cachedRequest(
+    async () => deriveCrops(await weather(), await agro(), now),
+    15 * MINUTE,
+    (previous) => previous?.stages?.length ? { ...previous, status: 'cached' } : emptyCrops,
+    now,
+  );
   const routes = new Map([
     ['/api/weather', weather],
     ['/api/observations', async () => {
@@ -91,6 +99,7 @@ export function createApiMiddleware({ env = process.env, fetcher = fetch, now = 
     }],
     ['/api/soil-profile', soilProfile],
     ['/api/agro', agro],
+    ['/api/crops', crops],
     ['/api/alerts', async () => {
       const result = await alerts();
       return { ...result, alerts: result.alerts.filter(({ endsAt }) => !endsAt || Date.parse(endsAt) > now()) };

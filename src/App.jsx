@@ -142,8 +142,10 @@ function KpiStrip({ observations, profile, agro, alerts, onOpen }) {
   </div>;
 }
 
-function WeatherPanel({ weather, onOpen }) {
+function WeatherPanel({ weather, regional, onOpen }) {
   const current = weather?.current;
+  const grid = regional?.current;
+  const astro = regional?.astro?.[0];
   const condition = current?.text ?? weatherText(current?.code);
   const Icon = condition === "晴" ? Sun : condition === "阴" ? Cloud : condition.includes("雨") ? CloudRain : condition.includes("雾") ? CloudFog : CloudSun;
   return <section className="panel weather-panel">
@@ -158,15 +160,28 @@ function WeatherPanel({ weather, onOpen }) {
       <Metric icon={Wind} label="风速" value={current?.wind} unit="km/h" />
       <Metric icon={Gauge} label="气压" value={current?.pressure} unit="hPa" />
       <Metric icon={CloudRain} label="过去 24 小时雨量" value={current?.rain} unit="mm" />
+      <Metric icon={CloudFog} label="露点温度" value={grid?.dewPoint} unit="°C" />
+      <Metric icon={Thermometer} label="体感温度" value={grid?.apparent} unit="°C" />
     </div>
     <div className="panel-footer">
       <span>{current?.time ? `${formatTime(current.time)}${weather.status === "cached" ? " · 最近记录" : ""}` : wave(weather)}</span>
+      {astro && <span>日出 {astro.sunrise} · 日落 {astro.sunset}</span>}
       <span>北京时间</span>
     </div>
   </section>;
 }
 
+// 临近降雨（15 分钟步长 nowcast）：给出未来 8 小时内的降雨起始提示。
+function nowcastOf(minutely, now = Date.now()) {
+  if (!minutely?.length) return null;
+  const onset = minutely.find(({ rain }) => rain > 0.1);
+  if (!onset) return { soon: false, text: `未来 ${Math.round((minutely.length * 15) / 60)} 小时临近预报无降雨` };
+  const minutes = Math.max(1, Math.round((Date.parse(onset.time) - now) / 60_000));
+  return { soon: true, text: minutes <= 90 ? `临近降雨：约 ${minutes} 分钟后开始，宜提前收拢露天农资` : `临近降雨：约 ${Math.round(minutes / 60)} 小时后开始` };
+}
+
 function ForecastPanel({ weather, risk, onOpen }) {
+  const nowcast = nowcastOf(weather?.minutely);
   return <section className="panel forecast-panel">
     <PanelTitle icon={CloudRain} title="未来 24 小时预报" action="详细" onClick={onOpen} />
     <div className="forecast-summary">
@@ -176,6 +191,9 @@ function ForecastPanel({ weather, risk, onOpen }) {
         <span><i className="legend-probability" />降雨概率</span>
       </div>
     </div>
+    {nowcast && <div className={`nowcast-strip ${nowcast.soon ? "nowcast-rain" : ""}`} role="status">
+      <CloudRain size={15} /> {nowcast.text}
+    </div>}
     <ForecastChart hours={weather?.hourly} />
   </section>;
 }
@@ -249,11 +267,21 @@ function FieldPanel({ onOpen }) {
   </section>;
 }
 
-function AgroPanel({ agro, onOpen, onReplay }) {
+// 决策摘要短标签：今晨 07:00–08:00 / 25日 09:00–12:00。
+const clockLabel = (iso, now = new Date()) => {
+  const day = Number(new Intl.DateTimeFormat("en-US", { timeZone: shanghai, day: "numeric" }).format(now));
+  const stamp = Number(iso.slice(8, 10));
+  return `${stamp === day ? "今" : `${stamp}日`} ${iso.slice(11, 16)}`;
+};
+
+function AgroPanel({ agro, crops, onOpen, onCrops, onReplay }) {
   const balance = agro?.waterBalance;
   const irrigate = balance != null && balance.irrigationRefMm > 0;
+  const spray = crops?.sprayWindows?.[0];
+  const pest = crops?.pests?.find(({ seasonal }) => seasonal);
+  const pestShort = pest ? `${pest.pest.replace(/（.*$/, "").replace(/病$/, "")} 适宜度${pest.level ?? "—"}` : crops ? "模型运行中" : "获取中";
   return <section className="panel agro-panel">
-    <PanelTitle icon={Drop} title="蒸散与灌溉决策" action="详细" onClick={onOpen} />
+    <PanelTitle icon={Drop} title="农事与灌溉决策" action="详细" onClick={onOpen} />
     <div className="agro-core">
       <div className="agro-et0">
         <span>参考蒸散 ET0</span>
@@ -265,6 +293,16 @@ function AgroPanel({ agro, onOpen, onReplay }) {
         <div><span>需水 ETc（番茄中期）</span><strong>{number(balance?.etcMid, 1)} <small>mm</small></strong></div>
       </div>
     </div>
+    <div className="risk-links agro-decision">
+      <button type="button" className={`risk-chip ${!spray ? "risk-chip-high" : ""}`} onClick={onCrops}
+        title="未来 48 小时昼间喷药适宜时段（无雨、风速 < 15 km/h、气温 10–30℃）">
+        <span>喷药窗口 · {spray ? `${clockLabel(spray.start)}–${spray.end.slice(11, 16)}` : "48h 暂无"}</span><CaretRight size={13} />
+      </button>
+      <button type="button" className={`risk-chip ${pest?.level === "高" ? "risk-chip-high" : ""}`} onClick={onCrops}
+        title="病虫气象适宜度（温湿度阈值法模型）">
+        <span>{pestShort}</span><CaretRight size={13} />
+      </button>
+    </div>
     <button type="button" className={`agro-advice ${irrigate ? "agro-advice-irrigate" : ""}`} onClick={onOpen} title="查看蒸散与灌溉决策详情">
       {!balance ? "水量平衡数据暂不可用" : irrigate ? <><Drop size={17} /> 参考补水 {number(balance.irrigationRefMm, 1)} mm</>
         : <><ShieldCheck size={17} /> 有效降雨覆盖作物参考需水量</>}
@@ -274,7 +312,7 @@ function AgroPanel({ agro, onOpen, onReplay }) {
 }
 
 // 农情简报条目：滚动播报与简报弹层共用同一份内容。
-function briefingItems(alerts, agro, profile) {
+function briefingItems(alerts, agro, profile, crops) {
   const items = [];
   const official = alerts?.status === "current" ? alerts.alerts : [];
   if (official.length) {
@@ -292,6 +330,13 @@ function briefingItems(alerts, agro, profile) {
   if (latest && profile?.layers) {
     items.push(`墒情速报：${profile.layers.map(({ id, label }) => `${label} ${gradeOf(latest.grade[id])?.label ?? "—"}`).join("、")}（${latest.date} ERA5-Land）`);
   }
+  const spray = crops?.sprayWindows?.[0];
+  if (crops) {
+    items.push(spray ? `作业窗口：最近喷药适宜 ${clockLabel(spray.start)}–${spray.end.slice(11, 16)}（最大风速 ${number(spray.windPeak, 1)} km/h）`
+      : "作业窗口：未来 48 小时昼间暂无喷药适宜窗口");
+  }
+  const pestHot = crops?.pests?.find(({ seasonal, level }) => seasonal && level === "高");
+  if (pestHot) items.push(`病虫提示：${pestHot.pest}气象适宜度高，${pestHot.action.split("；")[0]}`);
   for (const risk of agro?.risks?.slice(0, 2) ?? []) {
     items.push(`农气记录：${risk.type} ${risk.level} · ${risk.detail}（${risk.standard}）`);
   }
@@ -303,14 +348,14 @@ function briefingItems(alerts, agro, profile) {
   return items;
 }
 
-function Briefing({ alerts, agro, profile }) {
-  const items = briefingItems(alerts, agro, profile);
+function Briefing({ alerts, agro, profile, crops }) {
+  const items = briefingItems(alerts, agro, profile, crops);
   return <ul className="briefing-list">{items.map((item) => <li key={item}>{item}</li>)}</ul>;
 }
 
 // 底部滚动农情播报：常驻视口底部，点击可打开完整简报。
-function Ticker({ alerts, agro, profile, onOpen }) {
-  const text = briefingItems(alerts, agro, profile).join("　　◆　　");
+function Ticker({ alerts, agro, profile, crops, onOpen }) {
+  const text = briefingItems(alerts, agro, profile, crops).join("　　◆　　");
   return <footer className="ticker-bar" aria-label="农情播报" title="点击查看完整农情简报" onClick={onOpen}>
     <span className="ticker-label"><Broadcast size={15} /> 农情播报</span>
     <div className="ticker-viewport">
@@ -351,11 +396,13 @@ function Metadata({ rows }) {
   return <dl className="metadata">{rows.map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value ?? "—"}</dd></div>)}</dl>;
 }
 
-function WeatherDetails({ weather, variant, risk }) {
+function WeatherDetails({ weather, variant, risk, regional }) {
   const [dailyView, setDailyView] = useState(false);
   const current = weather?.current;
   const location = weather?.location;
   const hourly = weather?.hourly ?? [];
+  const hourlyExt = (regional ?? weather)?.hourlyExt ?? [];
+  const astro = (regional ?? weather)?.astro?.[0];
   const history = weather?.history ?? [];
   if (variant === "forecast") {
     const daily = weather?.daily ?? [];
@@ -372,9 +419,9 @@ function WeatherDetails({ weather, variant, risk }) {
       </div>
       {dailyView ? <>
         <h3 className="detail-heading">斗门逐日天气 · 北京时间</h3>
-        {daily.length ? <ReadingTable head={["日期", "天气", "气温 (°C)", "降水 (mm)", "最高降水概率 (%)", "最大阵风 (km/h)", "参考蒸散 (mm)"]}
-          rows={daily.map(({ date, code, minTemp, maxTemp, precipitation, probability, gust, et0 }) => [
-            date, weatherText(code), `${number(minTemp, 1)} / ${number(maxTemp, 1)}`, number(precipitation, 1), number(probability), number(gust, 1), number(et0, 2),
+        {daily.length ? <ReadingTable head={["日期", "天气", "气温 (°C)", "降水 (mm)", "最高降水概率 (%)", "最大阵风 (km/h)", "紫外线峰值", "参考蒸散 (mm)"]}
+          rows={daily.map(({ date, code, minTemp, maxTemp, precipitation, probability, gust, uvMax, et0 }) => [
+            date, weatherText(code), `${number(minTemp, 1)} / ${number(maxTemp, 1)}`, number(precipitation, 1), number(probability), number(gust, 1), number(uvMax, 1), number(et0, 2),
           ])} /> : <p className="detail-empty">暂无逐日预报。</p>}
         <p className="muted">气温按每日最低 / 最高值显示。参考蒸散是当日 ET₀ 总量，可与降水量一起用于安排田间巡查。</p>
       </> : <><div className="detail-metrics">
@@ -382,25 +429,35 @@ function WeatherDetails({ weather, variant, risk }) {
         <Metric icon={Drop} label="最高降雨概率" value={probabilities.length ? Math.max(...probabilities) : null} unit="%" />
         <Metric icon={Wind} label="最大阵风" value={gusts.length ? Math.max(...gusts) : null} unit="km/h" />
         <div className="metric"><span><Thermometer size={16} />气温范围</span><strong>{temperatures.length ? `${Math.min(...temperatures)}–${Math.max(...temperatures)}` : "—"} <small>°C</small></strong></div>
+        <Metric icon={CloudFog} label="当前露点" value={current?.dewPoint} unit="°C" />
+        <Metric icon={Thermometer} label="体感温度" value={current?.apparent} unit="°C" />
+        <Metric icon={Sun} label="今日紫外线峰值" value={astro?.uvMax} />
+        <div className="metric"><span><Sun size={16} />昼长 / 日照</span><strong>{astro ? `${Math.floor(astro.daylightMinutes / 60)} 时 ${astro.daylightMinutes % 60} 分 / ${number(astro.sunshineHours, 1)} h` : "—"}</strong></div>
       </div>
       <ForecastChart hours={hourly} featured />
       <h3 className="detail-heading">逐小时预报 · 北京时间</h3>
-      {hourly.length ? <ReadingTable head={["预报时刻", "气温 (°C)", "雨量 (mm)", "降雨概率 (%)", "阵风 (km/h)"]}
-        rows={hourly.map(({ time, temp, rain, probability, gust }) => [formatTime(time), number(temp, 1), number(rain, 1), number(probability), number(gust, 1)])} />
+      {hourlyExt.length ? <ReadingTable head={["预报时刻", "气温 (°C)", "湿度 (%)", "风速 (km/h)", "雨量 (mm)", "降雨概率 (%)", "阵风 (km/h)"]}
+        rows={hourlyExt.slice(0, 24).map(({ time, temp, humidity, wind, rain, probability, gust }) => [formatTime(time), number(temp, 1), number(humidity), number(wind, 1), number(rain, 1), number(probability), number(gust, 1)])} />
         : <p className="detail-empty">逐小时预报暂不可用。</p>}</>}
       <details className="source-details"><summary>预报时效与来源</summary><Metadata rows={[
         ["数据状态", wave(weather)], ["接口取数时间", formatTime(weather?.fetchedAt, "date")],
         ["参考坐标", location ? `${location.latitude}° N, ${location.longitude}° E` : "珠海市斗门区"],
+        ["日出 / 日落（今日）", astro ? `${astro.sunrise} / ${astro.sunset}` : "—"],
         ["来源", <Source label={weather?.source?.name ?? "Open-Meteo"} href={weather?.source?.url ?? "https://open-meteo.com/en/docs"} />],
       ]} /></details>
     </>;
   }
+  const regionalCurrent = regional?.current;
   return <>
     <div className="detail-metrics">
       <Metric icon={Thermometer} label="气温" value={current?.temp} unit="°C" />
       <Metric icon={Drop} label="相对湿度" value={current?.humidity} unit="%" />
       <Metric icon={Gauge} label="气压" value={current?.pressure} unit="hPa" />
       <Metric icon={CloudRain} label="24 小时雨量" value={current?.rain} unit="mm" />
+      <Metric icon={CloudFog} label="露点（格点）" value={regionalCurrent?.dewPoint} unit="°C" />
+      <Metric icon={Thermometer} label="体感（格点）" value={regionalCurrent?.apparent} unit="°C" />
+      <Metric icon={Sun} label="今日紫外线峰值" value={astro?.uvMax} />
+      <div className="metric"><span><Sun size={16} />日出 / 日落</span><strong>{astro ? `${astro.sunrise} / ${astro.sunset}` : "—"}</strong></div>
     </div>
     <p>{formatTime(current?.time, "date")} · {current?.text ?? "斗门站"}{current?.windDirection ? ` · ${current.windDirection} ${current.windLevel ?? ""}` : ""}</p>
     <h3 className="detail-heading">过去 24 小时 · 斗门站整点实况</h3>
@@ -412,6 +469,7 @@ function WeatherDetails({ weather, variant, risk }) {
     </> : <p className="detail-empty">暂无斗门站整点记录。</p>}
     <details className="source-details"><summary>观测口径与来源</summary>
       <Metadata rows={[["24 小时累计雨量", "中国天气网实况字段，单位 mm"], ["逐时雨量", "截至该观测时刻的前 1 小时累计，单位 mm"],
+        ["露点 / 体感 / 紫外线 / 日出日落", "Open-Meteo 斗门格点（22.21° N, 113.30° E）同时次参考值"],
         ["取数时间", formatTime(weather?.fetchedAt, "date")]]} />
       <Source label="中国天气网斗门站" href={stationUrl} />
       {weather?.historySource?.url && <Source label="中央气象台斗门站 · 59487" href={weather.historySource.url} />}
@@ -526,6 +584,48 @@ function AgroDetails({ agro, weather, onReplay, onWater }) {
     <Source label="FAO-56 灌溉与排水论文（方法原文）" href="https://www.fao.org/4/x0490e/x0490e00.htm" />
     <button type="button" className="text-button" onClick={onWater}>查看区域水环境 <CaretRight size={15} /></button>
     <button type="button" className="primary-button detail-action" onClick={onReplay}><PlayCircle size={20} /> 番茄田灌溉实测回放 <ArrowUpRight size={16} /></button>
+  </>;
+}
+
+// 作物农事决策详情：生育期农事、喷药作业窗口、病虫气象适宜度、冬种积温。
+function CropsDetails({ crops, onLamp }) {
+  const { stages = [], sprayWindows = [], pests = [], gdd, method } = crops ?? {};
+  const month = new Intl.DateTimeFormat("zh-CN", { timeZone: shanghai, month: "long" }).format(new Date());
+  return <>
+    <span className="subtle-tag">作物农事决策 · 派生数据</span>
+    <p className="case-intro">由 Open-Meteo 未来 48 小时逐时预报与 NASA POWER 农业气象日值实时派生，覆盖斗门主栽作物的生育期农事、喷药作业窗口与病虫气象适宜度，辅助田间作业安排。</p>
+    <h3 className="detail-heading">当季作物与农事要点（{month}）</h3>
+    {stages.length ? <ReadingTable head={["作物", "当前生育期", "农事要点"]}
+      rows={stages.map(({ name, stage, focus }) => [name, stage, focus])} />
+      : <p className="detail-empty">作物决策数据获取中。</p>}
+    <p className="muted">生育期划分依据珠海市农业农村局种粮扶持通知（早造插秧 3/1–4/20、晚造 7/10–8/20）与广东省农业科学院公开农事月历。</p>
+    <h3 className="detail-heading">喷药作业窗口 · 未来 48 小时</h3>
+    {sprayWindows.length ? <ReadingTable head={["时段", "时长", "气温范围", "最大风速 (km/h)"]}
+      rows={sprayWindows.map(({ start, end, hours, tempRange, windPeak }) => [
+        `${clockLabel(start)} – ${end.slice(11, 16)}`, `${hours} 小时`, tempRange, number(windPeak, 1),
+      ])} />
+      : <p className="detail-empty">未来 48 小时昼间无连续 2 小时以上的适宜窗口（大风或降雨为主），待风速回落、降雨间歇后再安排作业。</p>}
+    <p className="muted">{method?.spray}</p>
+    <h3 className="detail-heading">病虫气象适宜度</h3>
+    <div className="agro-risk-list">{pests.map((pest) => <div key={pest.id} className="agro-risk-item">
+      <strong>{pest.pest} · 适宜度{pest.level ?? "—"}{!pest.seasonal ? "（非敏感期）" : ""}</strong>
+      <small>寄主：{pest.host}</small>
+      <span>适宜条件：{pest.condition}</span>
+      <span>近 7 日 {pest.recentPct ?? "—"}% 日数适宜 · 未来 48 小时 {pest.forecastPct ?? "—"}% 时数适宜</span>
+      <small>{pest.action}</small>
+    </div>)}</div>
+    <p className="muted">{method?.pest}</p>
+    {gdd && <>
+      <h3 className="detail-heading">冬种蔬菜有效积温</h3>
+      <Metadata rows={[
+        ["累计有效积温", `${number(gdd.cumulative)} ℃·d（自 ${gdd.since} 起）`],
+        ["累计天数", `${gdd.days} 天 · 日均 ${number(gdd.dailyMean, 1)} ℃·d`],
+        ["计算方法", method?.gdd],
+      ]} />
+    </>}
+    <button type="button" className="text-button detail-action" onClick={onLamp}>虫情测报灯部署方案 <CaretRight size={15} /></button>
+    <Source label="Open-Meteo 逐时预报" href="https://open-meteo.com/en/docs" />
+    <Source label="NASA POWER 农业气象日值" href="https://power.larc.nasa.gov/" />
   </>;
 }
 
@@ -789,7 +889,7 @@ function ReplayDetails() {
 }
 
 // 四情监测状态条：墒情 / 苗情 / 虫情 / 灾情。
-function FourQuads({ profile, ndvi, alerts, onOpen }) {
+function FourQuads({ profile, ndvi, alerts, crops, onOpen }) {
   const latest = profile?.days?.at(-1);
   const scenes = ndvi?.scenes ?? [];
   const last = scenes.at(-1);
@@ -798,6 +898,7 @@ function FourQuads({ profile, ndvi, alerts, onOpen }) {
     ? last.ndvi.overall - prev.ndvi.overall : null;
   const TrendIcon = trend == null ? null : trend >= 0 ? ChartLineUp : ChartLineDown;
   const official = alerts?.status === "current" ? alerts.alerts : null;
+  const pest = crops?.pests?.find(({ seasonal }) => seasonal);
   const disaster = !alerts ? { text: "查询中" }
     : official == null ? { text: "暂不可查" }
     : official.length ? { text: `${official.length} 条生效`, tone: "trend-down" }
@@ -812,8 +913,9 @@ function FourQuads({ profile, ndvi, alerts, onOpen }) {
       {last ? <small>NDVI {number(last.ndvi?.overall, 2)}{TrendIcon && <TrendIcon size={13} className={trend >= 0 ? "trend-up" : "trend-down"} />}</small>
         : <small>待更新</small>}
     </button>
-    <button type="button" className="quad-pending" onClick={() => onOpen("lamp")} title="查看虫情测报灯部署方案">
-      <Bug size={16} /><span>虫情</span><small>测报灯</small>
+    <button type="button" className={pest?.level === "高" ? "quad-alert" : ""} onClick={() => onOpen("crops")} title="病虫气象适宜度与测报灯部署方案">
+      <Bug size={16} /><span>虫情</span>
+      <small>{pest ? `${pest.pest.replace(/（.*$/, "")}·${pest.level ?? "—"}` : crops ? "模型运行中" : "获取中"}</small>
     </button>
     <button type="button" onClick={() => onOpen("risk")} title="查看预警值守">
       <ShieldWarning size={16} /><span>灾情</span>
@@ -1256,6 +1358,7 @@ export function App() {
   const agro = useReading("/api/agro", 3_600_000, "/data/agro-snapshot.json");
   const satelliteSoil = useReading("/data/doumen-satellite-soil.json", 3_600_000);
   const ndvi = useReading("/data/ndvi-history.json", 3_600_000);
+  const crops = useReading("/api/crops", 900_000);
   const alerts = useActiveAlerts(useReading("/api/alerts", 300_000));
   const [views, setViews] = useState([]);
   const [fullscreen, setFullscreen] = useState(false);
@@ -1281,7 +1384,7 @@ export function App() {
   const titles = { weather: "斗门天气实况", forecast: "斗门天气预报", soil: "土壤墒情监测",
     ndvi: "苗情长势（NDVI）", agro: "蒸散与灌溉决策", risk: "预警值守与农事处置", storm: "台风「桦加沙」", field: "斗门田间影像档案", replay: "番茄田实测回放",
     map: "卫星底图与调研点位", archive: "斗门官方预警档案", alert: view?.archived ? "历史预警详情" : "在效预警详情",
-    plot: PILOT_FIELD.name, links: "数据链路自检", help: "键盘快捷键", lamp: "虫情测报灯 · 部署方案",
+    plot: PILOT_FIELD.name, links: "数据链路自检", help: "键盘快捷键", lamp: "虫情测报灯 · 部署方案", crops: "作物农事决策",
     report: "农情日报", briefing: "农情简报", rainfall: "斗门镇暴雨实测记录",
     actions: "农事处置", water: "斗门区域水环境", image: view?.image?.title };
   const dataLinks = [
@@ -1292,6 +1395,7 @@ export function App() {
     { key: "agro", label: "农业气象", role: "NASA POWER · FAO-56 Penman-Monteith", status: agro?.status, time: agro?.et0?.latestDate ? `${agro.et0.latestDate}T00:00:00+08:00` : null, fetchedAt: agro?.fetchedAt, cycle: "1 小时" },
     { key: "sat", label: "卫星表层", role: "NOAA CPC SMOPS · 表层 1–5 cm", status: satelliteSoil?.points?.length ? "archive" : satelliteSoil?.status, time: satelliteSoil?.points?.at(-1)?.time },
     { key: "ndvi", label: "植被指数", role: "Sentinel-2 · Microsoft Planetary Computer", status: ndvi?.scenes?.length ? "archive" : ndvi?.status, time: ndvi?.scenes?.at(-1)?.date },
+    { key: "crops", label: "作物决策", role: "平台模型 · 逐时预报 + 农业气象派生", status: crops?.stages?.length ? crops.status : crops?.status, time: crops?.fetchedAt, fetchedAt: crops?.fetchedAt, cycle: "15 分钟" },
     { key: "alerts", label: "官方预警", role: "珠海市 / 斗门区 · 多渠道聚合", status: alerts?.status, time: alerts?.fetchedAt, fetchedAt: alerts?.fetchedAt, cycle: "5 分钟" },
   ];
 
@@ -1374,7 +1478,7 @@ export function App() {
 
       <div className="board-grid">
         <aside className="board-column readings" aria-label="天气和墒情">
-          <WeatherPanel weather={observations} onOpen={() => open("weather")} />
+          <WeatherPanel weather={observations} regional={weather} onOpen={() => open("weather")} />
           <SoilPanel profile={profile} onOpen={() => open("soil")} />
           <ForecastPanel weather={weather} risk={risk} onOpen={() => open("forecast")} />
         </aside>
@@ -1383,7 +1487,7 @@ export function App() {
             <PanelTitle icon={MapTrifold} title="农田地理态势" action="影像档案" onClick={() => openField("aerial")} />
           </div>
           <FieldMap onVillage={(village) => open("village", { village })} onMapInfo={() => open("map")} onPhoto={openPhoto} onPlot={() => open("plot")} />
-          <FourQuads profile={profile} ndvi={ndvi} alerts={alerts} onOpen={open} />
+          <FourQuads profile={profile} ndvi={ndvi} alerts={alerts} crops={crops} onOpen={open} />
           <div className="survey-list">
             {villages.map((village) => <button type="button" key={village.id}
               className="village-card" onClick={() => open("village", { village })}>
@@ -1398,12 +1502,12 @@ export function App() {
         </section>
         <aside className="board-column operations" aria-label="风险、现场和滴灌">
           <RiskPanel risk={risk} alerts={alerts} onRisk={() => open("risk")} onAction={() => open("actions")} onArchive={openArchive} onAlert={openAlert} />
-          <AgroPanel agro={agro} onOpen={() => open("agro")} onReplay={() => open("replay")} />
+          <AgroPanel agro={agro} crops={crops} onOpen={() => open("agro")} onCrops={() => open("crops")} onReplay={() => open("replay")} />
           <FieldPanel onOpen={() => openField("overhead")} />
         </aside>
       </div>
       <DataLinksBar sources={dataLinks} onOpen={() => open("links")} />
-      <Ticker alerts={alerts} agro={agro} profile={profile} onOpen={() => open("briefing")} />
+      <Ticker alerts={alerts} agro={agro} profile={profile} crops={crops} onOpen={() => open("briefing")} />
       <ProductionRecords onField={openField} onRisk={() => open("actions")} onWater={() => open("water")} />
       <footer className="app-footer">
         <span className="footer-brand"><Monitor size={15} /> 珠海斗门智慧农田监测</span>
@@ -1423,7 +1527,7 @@ export function App() {
     {view && <Details page={view.type} title={view.village?.name ?? titles[view.type]}
       wide={["field", "image", "replay", "report", "weather", "forecast"].includes(view.type)} onClose={close}
       onBack={views.length > 1 ? () => setViews((previous) => previous.slice(0, -1)) : undefined}>
-      {["weather", "forecast"].includes(view.type) && <WeatherDetails weather={view.type === "weather" ? observations : weather} variant={view.type} risk={risk} />}
+      {["weather", "forecast"].includes(view.type) && <WeatherDetails weather={view.type === "weather" ? observations : weather} variant={view.type} risk={risk} regional={weather} />}
       {view.type === "soil" && <SoilDetails profile={profile} satellite={satelliteSoil} onReplay={() => open("replay")} />}
       {view.type === "ndvi" && <NdviDetails ndvi={ndvi} />}
       {view.type === "agro" && <AgroDetails agro={agro} weather={weather} onReplay={() => open("replay")} onWater={() => open("water")} />}
@@ -1453,7 +1557,8 @@ export function App() {
       {view.type === "plot" && <PlotDetails profile={profile} ndvi={ndvi} onSoil={() => open("soil")} onField={openField} onReplay={() => open("replay")} />}
       {view.type === "links" && <DataLinksDetails sources={dataLinks} />}
       {view.type === "water" && <WaterDetails />}
-      {view.type === "briefing" && <Briefing alerts={alerts} agro={agro} profile={profile} />}
+      {view.type === "crops" && <CropsDetails crops={crops} onLamp={() => open("lamp")} />}
+      {view.type === "briefing" && <Briefing alerts={alerts} agro={agro} profile={profile} crops={crops} />}
       {view.type === "report" && <DailyReport observations={observations} profile={profile} agro={agro} alerts={alerts} risk={risk} />}
       {view.type === "help" && <ShortcutsHelp />}
       {view.type === "lamp" && <LampDetails />}
