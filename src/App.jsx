@@ -159,7 +159,7 @@ function WeatherPanel({ weather, regional, onOpen }) {
       <Metric icon={Drop} label="相对湿度" value={current?.humidity} unit="%" />
       <Metric icon={Wind} label="风速" value={current?.wind} unit="km/h" />
       <Metric icon={Gauge} label="气压" value={current?.pressure} unit="hPa" />
-      <Metric icon={CloudRain} label="过去 24 小时雨量" value={current?.rain} unit="mm" />
+      <Metric icon={CloudRain} label="24 小时雨量" value={current?.rain} unit="mm" />
       <Metric icon={CloudFog} label="露点温度" value={grid?.dewPoint} unit="°C" />
       <Metric icon={Thermometer} label="体感温度" value={grid?.apparent} unit="°C" />
     </div>
@@ -171,12 +171,13 @@ function WeatherPanel({ weather, regional, onOpen }) {
   </section>;
 }
 
-// 临近降雨（15 分钟步长 nowcast）：给出未来 8 小时内的降雨起始提示。
+// 临近降雨（15 分钟步长 nowcast）：只看当前时刻之后的样本，给出未来 8 小时内的降雨起始提示。
 function nowcastOf(minutely, now = Date.now()) {
-  if (!minutely?.length) return null;
-  const onset = minutely.find(({ rain }) => rain > 0.1);
-  if (!onset) return { soon: false, text: `未来 ${Math.round((minutely.length * 15) / 60)} 小时临近预报无降雨` };
-  const minutes = Math.max(1, Math.round((Date.parse(onset.time) - now) / 60_000));
+  const ahead = (minutely ?? []).filter(({ time }) => Date.parse(time) > now + 15 * 60_000);
+  if (!ahead.length) return null;
+  const onset = ahead.find(({ rain }) => rain > 0.1);
+  if (!onset) return { soon: false, text: `未来 ${Math.round((ahead.length * 15) / 60)} 小时临近预报无降雨` };
+  const minutes = Math.round((Date.parse(onset.time) - now) / 60_000);
   return { soon: true, text: minutes <= 90 ? `临近降雨：约 ${minutes} 分钟后开始，宜提前收拢露天农资` : `临近降雨：约 ${Math.round(minutes / 60)} 小时后开始` };
 }
 
@@ -186,14 +187,16 @@ function ForecastPanel({ weather, risk, onOpen }) {
     <PanelTitle icon={CloudRain} title="未来 24 小时预报" action="详细" onClick={onOpen} />
     <div className="forecast-summary">
       <div><span>{weather?.status === "cached" ? "上次预报 · 累计降雨" : "累计降雨"}</span><strong>{number(risk.total, 1)} <small>mm</small></strong></div>
-      <div className="chart-legend">
-        <span><i className="legend-rain" />雨量</span>
-        <span><i className="legend-probability" />降雨概率</span>
+      <div className="forecast-side">
+        {nowcast && <div className={`nowcast-strip ${nowcast.soon ? "nowcast-rain" : ""}`} role="status">
+          <CloudRain size={15} /> {nowcast.text}
+        </div>}
+        <div className="chart-legend">
+          <span><i className="legend-rain" />雨量</span>
+          <span><i className="legend-probability" />降雨概率</span>
+        </div>
       </div>
     </div>
-    {nowcast && <div className={`nowcast-strip ${nowcast.soon ? "nowcast-rain" : ""}`} role="status">
-      <CloudRain size={15} /> {nowcast.text}
-    </div>}
     <ForecastChart hours={weather?.hourly} />
   </section>;
 }
@@ -1395,7 +1398,70 @@ function ShortcutsHelp() {
   </>;
 }
 
+// 首屏自适应：把「标题 + 指标条 + 三栏看板」整体放进页头以下、播报条以上的一屏内。
+// 窗口模式只在轻微放不下（缩放比不低于 0.9）时整体微缩，否则保留页面滚动；
+// 全屏模式或地址带 ?fit=1（展厅、值班大屏直接打开）时始终完整显示。
+const FIT_MIN_SCALE = 0.9;
+const FIT_MIN_WIDTH = 1061;
+
+function useScreenFit() {
+  const frame = useRef(null);
+  const screen = useRef(null);
+  useLayoutEffect(() => {
+    const outer = frame.current;
+    const inner = screen.current;
+    if (!outer || !inner) return undefined;
+    const forcedFit = new URLSearchParams(window.location.search).get("fit") === "1";
+    const apply = (zoom, height) => {
+      inner.style.zoom = String(zoom);
+      inner.style.height = height == null ? "auto" : `${height}px`;
+      outer.style.height = height == null ? "auto" : `${height * zoom}px`;
+    };
+    // 元素自身坐标系里的自然高度，不依赖浏览器如何报告 zoom 下的尺寸。
+    const localHeight = (zoom) => {
+      const rect = inner.getBoundingClientRect();
+      const rectScaled = Math.abs(rect.width - inner.offsetWidth) > 1;
+      return (rectScaled ? rect.height : rect.height * zoom) / zoom;
+    };
+    const fit = () => {
+      if (window.innerWidth < FIT_MIN_WIDTH) { apply(1, null); return; }
+      const header = document.querySelector(".app-header");
+      const ticker = document.querySelector(".ticker-bar");
+      const tickerSpace = ticker ? ticker.offsetHeight + (parseFloat(getComputedStyle(ticker).marginTop) || 0) : 0;
+      const available = window.innerHeight - (header?.offsetHeight ?? 64) - tickerSpace - 12;
+      if (available < 420) { apply(1, null); return; }
+      // 缩放后版心变宽、折行变少，高度会随之变化，迭代两三轮即可收敛。
+      let zoom = 1;
+      for (let pass = 0; pass < 4; pass++) {
+        apply(zoom, null);
+        const target = Math.min(1, available / localHeight(zoom));
+        if (Math.abs(target - zoom) < 0.004) break;
+        zoom = target;
+      }
+      if (document.fullscreenElement || forcedFit || zoom >= FIT_MIN_SCALE) apply(zoom, available / zoom);
+      else apply(1, null);
+    };
+    let queued = 0;
+    const schedule = () => {
+      queued ||= window.requestAnimationFrame(() => { queued = 0; fit(); });
+    };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(inner);
+    window.addEventListener("resize", schedule);
+    document.addEventListener("fullscreenchange", schedule);
+    fit();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", schedule);
+      document.removeEventListener("fullscreenchange", schedule);
+      window.cancelAnimationFrame(queued);
+    };
+  }, []);
+  return { frame, screen };
+}
+
 export function App() {
+  const { frame: screenFrame, screen: screenContent } = useScreenFit();
   const weather = useReading("/api/weather", 900_000, "/data/weather-snapshot.json");
   const observations = useReading("/api/observations", 300_000, "/data/observations-snapshot.json");
   const profile = useReading("/api/soil-profile", 3_600_000, "/data/soil-profile-snapshot.json");
@@ -1504,51 +1570,55 @@ export function App() {
     </header>
 
     <main className="dashboard">
-      <div className="dashboard-head">
-        <div><h1>斗门区农情监测中心</h1><p>斗门镇 · 大濠冲村 / 小濠冲村</p></div>
-        <div className="head-side">
-          <TermChip />
-          <button type="button" className="report-button" onClick={() => open("report")} title="自动汇总当日农情，支持打印导出">
-            <FileText size={16} /> 农情日报
-          </button>
-          <div className={`connection ${observations?.status ?? "loading"}`} role="status">
-            <i /> <span>{observations?.status === "current" ? "斗门气象实况" : wave(observations)}</span>
-            {observations?.current?.time && <small>{formatTime(observations.current.time)} 发布</small>}
+      <div className="screen-frame" ref={screenFrame}>
+        <div className="screen" ref={screenContent}>
+          <div className="dashboard-head">
+            <div><h1>斗门区农情监测中心</h1><p>斗门镇 · 大濠冲村 / 小濠冲村</p></div>
+            <div className="head-side">
+              <TermChip />
+              <button type="button" className="report-button" onClick={() => open("report")} title="自动汇总当日农情，支持打印导出">
+                <FileText size={16} /> 农情日报
+              </button>
+              <div className={`connection ${observations?.status ?? "loading"}`} role="status">
+                <i /> <span>{observations?.status === "current" ? "斗门气象实况" : wave(observations)}</span>
+                {observations?.current?.time && <small>{formatTime(observations.current.time)} 发布</small>}
+              </div>
+            </div>
+          </div>
+          <KpiStrip observations={observations} profile={profile} agro={agro} alerts={alerts} onOpen={open} />
+          {screenError && <p className="screen-error" role="status">{screenError}</p>}
+
+          <div className="board-grid">
+            <aside className="board-column readings" aria-label="天气和墒情">
+              <WeatherPanel weather={observations} regional={weather} onOpen={() => open("weather")} />
+              <SoilPanel profile={profile} onOpen={() => open("soil")} />
+              <ForecastPanel weather={weather} risk={risk} onOpen={() => open("forecast")} />
+            </aside>
+            <section className="panel map-panel">
+              <div className="map-panel-header">
+                <PanelTitle icon={MapTrifold} title="农田地理态势" action="影像档案" onClick={() => openField("aerial")} />
+              </div>
+              <FieldMap onVillage={(village) => open("village", { village })} onMapInfo={() => open("map")} onPhoto={openPhoto} onPlot={() => open("plot")} />
+              <FourQuads profile={profile} ndvi={ndvi} alerts={alerts} crops={crops} onOpen={open} />
+              <div className="survey-list">
+                {villages.map((village) => <button type="button" key={village.id}
+                  className="village-card" onClick={() => open("village", { village })}>
+                  <span className="village-card-icon"><MapPin size={20} weight="duotone" /></span>
+                  <span><strong>{village.name}</strong><small>{village.label}</small></span><CaretRight size={17} />
+                </button>)}
+                <button type="button" className="village-card pilot-card" onClick={() => open("plot")} title="查看拟试点地块详情">
+                  <span className="village-card-icon pilot-swatch" />
+                  <span><strong>{PILOT_FIELD.name}</strong><small>西部沿海高速旁</small></span><CaretRight size={17} />
+                </button>
+              </div>
+            </section>
+            <aside className="board-column operations" aria-label="风险、现场和滴灌">
+              <RiskPanel risk={risk} alerts={alerts} onRisk={() => open("risk")} onAction={() => open("actions")} onArchive={openArchive} onAlert={openAlert} />
+              <AgroPanel agro={agro} crops={crops} onOpen={() => open("agro")} onCrops={() => open("crops")} onReplay={() => open("replay")} />
+              <FieldPanel onOpen={() => openField("overhead")} />
+            </aside>
           </div>
         </div>
-      </div>
-      <KpiStrip observations={observations} profile={profile} agro={agro} alerts={alerts} onOpen={open} />
-      {screenError && <p className="screen-error" role="status">{screenError}</p>}
-
-      <div className="board-grid">
-        <aside className="board-column readings" aria-label="天气和墒情">
-          <WeatherPanel weather={observations} regional={weather} onOpen={() => open("weather")} />
-          <SoilPanel profile={profile} onOpen={() => open("soil")} />
-          <ForecastPanel weather={weather} risk={risk} onOpen={() => open("forecast")} />
-        </aside>
-        <section className="panel map-panel">
-          <div className="map-panel-header">
-            <PanelTitle icon={MapTrifold} title="农田地理态势" action="影像档案" onClick={() => openField("aerial")} />
-          </div>
-          <FieldMap onVillage={(village) => open("village", { village })} onMapInfo={() => open("map")} onPhoto={openPhoto} onPlot={() => open("plot")} />
-          <FourQuads profile={profile} ndvi={ndvi} alerts={alerts} crops={crops} onOpen={open} />
-          <div className="survey-list">
-            {villages.map((village) => <button type="button" key={village.id}
-              className="village-card" onClick={() => open("village", { village })}>
-              <span className="village-card-icon"><MapPin size={20} weight="duotone" /></span>
-              <span><strong>{village.name}</strong><small>{village.label}</small></span><CaretRight size={17} />
-            </button>)}
-            <button type="button" className="village-card pilot-card" onClick={() => open("plot")} title="查看拟试点地块详情">
-              <span className="village-card-icon pilot-swatch" />
-              <span><strong>{PILOT_FIELD.name}</strong><small>西部沿海高速旁</small></span><CaretRight size={17} />
-            </button>
-          </div>
-        </section>
-        <aside className="board-column operations" aria-label="风险、现场和滴灌">
-          <RiskPanel risk={risk} alerts={alerts} onRisk={() => open("risk")} onAction={() => open("actions")} onArchive={openArchive} onAlert={openAlert} />
-          <AgroPanel agro={agro} crops={crops} onOpen={() => open("agro")} onCrops={() => open("crops")} onReplay={() => open("replay")} />
-          <FieldPanel onOpen={() => openField("overhead")} />
-        </aside>
       </div>
       <DataLinksBar sources={dataLinks} onOpen={() => open("links")} />
       <Ticker alerts={alerts} agro={agro} profile={profile} crops={crops} onOpen={() => open("briefing")} />

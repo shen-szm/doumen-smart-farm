@@ -254,6 +254,10 @@ button.cross-row:hover span strong { color: var(--mint); }
   .print-report tr { break-inside: avoid; }
 }
 
+/* 首屏：标题 + 指标条 + 三栏看板。useScreenFit 按可用高度整体缩放这一块，播报条在其下方常驻 */
+.screen-frame { min-width: 0; }
+.screen { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
 .board-grid {
   display: grid;
   grid-template-columns: minmax(276px, 1fr) minmax(0, 2.38fr) minmax(282px, 1fr);
@@ -278,7 +282,8 @@ button.cross-row:hover span strong { color: var(--mint); }
 .weather-core strong small { font-size: .39em; color: var(--muted); margin-left: 6px; letter-spacing: 0; }
 .weather-core p { margin-top: 6px; font-size: 14px; color: #dce8f1; }
 .weather-core p span { color: var(--muted); font-size: 12px; }
-.weather-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; row-gap: 5px; }
+/* 六项指标三列两行；栏宽不足时退回两列 */
+.weather-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 10px; row-gap: 5px; }
 .metric { border-top: 1px solid var(--line); min-width: 0; padding-top: 5px; }
 .metric span { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .metric span svg { color: #8ab7c4; }
@@ -288,13 +293,12 @@ button.cross-row:hover span strong { color: var(--mint); }
 .weather-panel .panel-title { margin-bottom: 7px; }
 .weather-panel .panel-footer { margin-top: 9px; padding-top: 7px; }
 
-.forecast-summary { display: flex; align-items: flex-end; justify-content: space-between; gap: 5px; margin-bottom: 8px; }
-.nowcast-strip {
-  display: flex; align-items: center; gap: 7px; margin: -2px 0 8px; padding: 6px 10px;
-  border: 1px solid var(--line); border-radius: 6px; background: #16303a; color: #a8ccd6; font-size: 12px;
-}
+.forecast-summary { display: flex; align-items: flex-end; justify-content: space-between; gap: 5px 12px; margin-bottom: 8px; }
+.forecast-side { display: grid; justify-items: end; gap: 4px; min-width: 0; }
+/* 临近降雨提示与图例并排在累计雨量右侧，不单独占一行 */
+.nowcast-strip { display: flex; align-items: center; justify-content: flex-end; gap: 6px; color: #a8ccd6; font-size: 12px; text-align: right; }
 .nowcast-strip svg { color: #8ab7c4; flex: none; }
-.nowcast-strip.nowcast-rain { border-color: #6b94a8; background: #1a3a48; color: #cfe8f3; }
+.nowcast-strip.nowcast-rain { color: #cfe8f3; }
 .nowcast-strip.nowcast-rain svg { color: #6fb7e8; animation: link-pulse 1.6s ease-in-out infinite; }
 .forecast-summary > div:first-child { display: grid; gap: 2px; }
 .forecast-summary > div:first-child > span { font-size: 12px; color: var(--muted); }
@@ -479,7 +483,8 @@ button.level-badge:hover { filter: brightness(1.19); }
 .agro-et0 > small { color: var(--subtle); font-size: 11px; white-space: nowrap; }
 .agro-balance { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-width: 0; }
 .agro-balance > div { border-top: 1px solid var(--line); padding-top: 5px; display: grid; gap: 3px; min-width: 0; }
-.agro-balance span { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agro-balance span { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; word-break: keep-all; }
+.agro-balance span em { font-style: normal; color: var(--subtle); }
 .agro-balance strong { font-family: var(--number); font-size: 19px; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .agro-balance strong small { font-size: 11px; color: var(--muted); font-weight: 500; }
 .agro-advice {
@@ -737,6 +742,9 @@ body:has(.detail[open]) { overflow: hidden; }
   .ticker-bar { height: 32px; margin-top: 9px; }
   .ticker-track > span { line-height: 32px; }
 }
+@media (max-width: 1760px) {
+  .weather-grid { grid-template-columns: 1fr 1fr; }
+}
 @media (max-width: 1270px) {
   .clock-display > span { display: none; }
   .board-grid { grid-template-columns: minmax(258px, .95fr) minmax(0, 2.1fr) minmax(255px, .95fr); gap: 12px; }
@@ -762,6 +770,8 @@ body:has(.detail[open]) { overflow: hidden; }
   .village-card strong { font-size: 13px; }
   .agro-balance { gap: 6px; }
   .agro-balance span { white-space: normal; }
+  /* 右栏较窄时两个决策胶囊上下排列，避免文字被截断 */
+  .agro-decision { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 630px) {
   .app-header, .dashboard { padding-inline: 12px; }
