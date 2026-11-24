@@ -176,7 +176,7 @@ function nowcastOf(minutely, now = Date.now()) {
   const ahead = (minutely ?? []).filter(({ time }) => Date.parse(time) > now + 15 * 60_000);
   if (!ahead.length) return null;
   const onset = ahead.find(({ rain }) => rain > 0.1);
-  if (!onset) return { soon: false, text: `未来 ${Math.round((ahead.length * 15) / 60)} 小时临近预报无降雨` };
+  if (!onset) return { soon: false, text: `未来 ${Math.round((ahead.length * 15) / 60)} 小时无降雨` };
   const minutes = Math.round((Date.parse(onset.time) - now) / 60_000);
   return { soon: true, text: minutes <= 90 ? `临近降雨：约 ${minutes} 分钟后开始，宜提前收拢露天农资` : `临近降雨：约 ${Math.round(minutes / 60)} 小时后开始` };
 }
@@ -188,7 +188,7 @@ function ForecastPanel({ weather, risk, onOpen }) {
     <div className="forecast-summary">
       <div><span>{weather?.status === "cached" ? "上次预报 · 累计降雨" : "累计降雨"}</span><strong>{number(risk.total, 1)} <small>mm</small></strong></div>
       <div className="forecast-side">
-        {nowcast && <div className={`nowcast-strip ${nowcast.soon ? "nowcast-rain" : ""}`} role="status">
+        {nowcast && <div className={`nowcast-strip ${nowcast.soon ? "nowcast-rain" : ""}`} role="status" title="15 分钟步长临近降雨预报">
           <CloudRain size={15} /> {nowcast.text}
         </div>}
         <div className="chart-legend">
@@ -297,7 +297,7 @@ function AgroPanel({ agro, crops, onOpen, onCrops }) {
       <div className="agro-balance">
         <div><span>近 10 日降雨{balance?.to && <em> 至 {monthDay(balance.to)}</em>}</span><strong>{number(balance?.precip, 1)} <small>mm</small></strong></div>
         <div><span>需水 ETc</span><strong>{number(balance?.etc, 1)} <small>mm</small></strong>
-          <small className="agro-crop" title="本月区域灌溉参考作物及生育期（取自农事日历）">{balance ? `${balance.name} · ${balance.stage}` : "本月无区域灌溉参考"}</small></div>
+          <small className="agro-crop" title="本月区域灌溉参考作物及生育期（取自农事日历）">{balance ? `${balance.name} · ${balance.stage}` : agro ? "本月无区域灌溉参考" : "获取中"}</small></div>
       </div>
     </div>
     <div className="risk-links agro-decision">
@@ -311,68 +311,94 @@ function AgroPanel({ agro, crops, onOpen, onCrops }) {
       </button>
     </div>
     <button type="button" className={`agro-advice ${irrigate ? "agro-advice-irrigate" : ""}`} onClick={onOpen} title="查看蒸散与灌溉决策详情">
-      {!balance ? "本月无区域灌溉参考作物" : irrigate ? <><Drop size={17} /> {balance.name}参考补水 {number(balance.irrigationRefMm, 1)} mm</>
+      {!balance ? (agro ? "本月无区域灌溉参考作物" : "水分平衡数据获取中") : irrigate ? <><Drop size={17} /> {balance.name}参考补水 {number(balance.irrigationRefMm, 1)} mm</>
         : <><ShieldCheck size={17} /> 有效降雨覆盖{balance.name}参考需水量</>}
     </button>
     <button type="button" className="primary-button" onClick={onCrops}><Plant size={20} /> 作物农事决策 <ArrowUpRight size={16} /></button>
   </section>;
 }
 
-// 农情简报条目：滚动播报与简报弹层共用同一份内容。
+// 农情简报条目：滚动播报与简报弹层共用同一份内容；每条带跳转目标，播报条上点击直达。
+// view.type 为 production 表示滚动定位到主界面的生产档案区。
 function briefingItems(alerts, agro, profile, crops) {
   const items = [];
   const official = alerts?.status === "current" ? alerts.alerts : [];
-  if (official.length) {
-    for (const alert of official) items.push(`【${levels[alertTone(alert)] ?? "官方"}预警】${alert.title}${alert.area ? ` · ${alert.area}` : ""}`);
-  } else if (alerts?.status === "current") {
-    items.push("预警值守：珠海市 / 斗门区当前无生效气象预警");
-  } else items.push("官方预警暂不可查询");
+  for (const alert of official) {
+    items.push({ key: `alert-${alert.id}`, pinned: true, view: { type: "alert", alert },
+      text: `【${levels[alertTone(alert)] ?? "官方"}预警】${alert.title}${alert.area ? ` · ${alert.area}` : ""}` });
+  }
+  if (!official.length) {
+    items.push({ key: "alert-none", view: { type: "risk" },
+      text: alerts?.status === "current" ? "预警值守：珠海市 / 斗门区当前无生效气象预警" : "官方预警暂不可查询" });
+  }
   const balance = agro?.waterBalance;
   if (balance) {
-    items.push(balance.irrigationRefMm > 0
+    items.push({ key: "irrigation", view: { type: "agro" }, text: balance.irrigationRefMm > 0
       ? `灌溉决策：${balance.name}（${balance.stage}）近 10 日参考灌溉 ${number(balance.irrigationRefMm, 1)} mm（约 ${number(balance.irrigationRefM3PerMu, 1)} m³/亩）`
-      : `灌溉决策：近 10 日有效降雨覆盖${balance.name}参考需水量，结合田间情况安排灌排`);
+      : `灌溉决策：近 10 日有效降雨覆盖${balance.name}参考需水量，结合田间情况安排灌排` });
   }
   const latest = profile?.days?.at(-1);
   if (latest && profile?.layers) {
-    items.push(`墒情速报：${profile.layers.map(({ id, label }) => `${label} ${gradeOf(latest.grade[id])?.label ?? "—"}`).join("、")}（${latest.date} ERA5-Land）`);
+    items.push({ key: "soil", view: { type: "soil" },
+      text: `墒情速报：${profile.layers.map(({ id, label }) => `${label} ${gradeOf(latest.grade[id])?.label ?? "—"}`).join("、")}（${latest.date} ERA5-Land）` });
   }
   const spray = crops?.sprayWindows?.[0];
   if (crops) {
-    items.push(spray ? `作业窗口：最近喷药适宜 ${clockLabel(spray.start)}–${spray.end.slice(11, 16)}（最大风速 ${number(spray.windPeak, 1)} km/h）`
-      : "作业窗口：未来 48 小时昼间暂无喷药适宜窗口");
+    items.push({ key: "spray", view: { type: "crops" }, text: spray
+      ? `作业窗口：最近喷药适宜 ${clockLabel(spray.start)}–${spray.end.slice(11, 16)}（最大风速 ${number(spray.windPeak, 1)} km/h）`
+      : "作业窗口：未来 48 小时昼间暂无喷药适宜窗口" });
   }
   const pestHot = crops?.pests?.find(({ seasonal, level }) => seasonal && level === "高");
-  if (pestHot) items.push(`病虫提示：${pestHot.pest}气象适宜度高，${pestHot.action.split("；")[0]}`);
+  if (pestHot) items.push({ key: "pest", view: { type: "crops" }, text: `病虫提示：${pestHot.pest}气象适宜度高，${pestHot.action.split("；")[0]}` });
   if (crops?.lamp) {
     const top = crops.lamp.species[0];
-    if (top) items.push(`虫情灯诱：近 7 日（${spanLabel(crops.lamp)}）合计 ${number(crops.lamp.total7)} 头 · 优势种 ${top.name}（周环比 ${top.trend > 0 ? "+" : ""}${top.trend ?? 0}%）`);
+    if (top) items.push({ key: "lamp", view: { type: "pest" },
+      text: `虫情灯诱：近 7 日（${spanLabel(crops.lamp)}）合计 ${number(crops.lamp.total7)} 头 · 优势种 ${top.name}（周环比 ${top.trend > 0 ? "+" : ""}${top.trend ?? 0}%）` });
   }
-  const latestOp = crops?.operations?.latest;
-  if (latestOp) items.push(`农事作业：${latestOp.date.slice(5).replace("-", "/")} ${latestOp.type} · ${latestOp.crop}${latestOp.area ? ` ${latestOp.area} 亩` : ""}`);
-  for (const risk of agro?.risks?.slice(0, 2) ?? []) {
-    items.push(`农气记录：${risk.type} ${risk.level} · ${risk.detail}（${risk.standard}）`);
+  // 例行巡田每天都在，只播报最近一次专项作业。
+  const latestOp = (crops?.operations?.records ?? []).find(({ type }) => type !== "巡田") ?? crops?.operations?.latest;
+  if (latestOp) {
+    items.push({ key: "operation", view: { type: "production" },
+      text: `农事作业：${monthDay(latestOp.date)} ${latestOp.type} · ${latestOp.crop}${latestOp.area ? ` ${latestOp.area} 亩` : ""}` });
   }
-  for (const { risk, alerts: matched } of crossMatches(agro, officialArchive)) {
-    items.push(`多源印证：${risk.window.slice(5).replace("-", "/")} ${matched[0].title} ↔ 卫星日雨量 ${risk.detail.replace("日雨量 ", "")}`);
+  for (const [index, risk] of (agro?.risks ?? []).slice(0, 2).entries()) {
+    items.push({ key: `agro-risk-${index}`, view: { type: "agro" }, text: `农气记录：${risk.type} ${risk.level} · ${risk.detail}（${risk.standard}）` });
+  }
+  for (const [index, { risk, alerts: matched }] of crossMatches(agro, officialArchive).entries()) {
+    items.push({ key: `cross-${index}`, view: { type: "risk" },
+      text: `多源印证：${risk.window.slice(5).replace("-", "/")} ${matched[0].title} ↔ 卫星日雨量 ${risk.detail.replace("日雨量 ", "")}` });
   }
   const term = solarTerm();
-  items.push(`农时：${term.name} · ${term.advice}`);
+  items.push({ key: "term", view: { type: "report" }, text: `农时：${term.name} · ${term.advice}` });
   return items;
 }
 
-function Briefing({ alerts, agro, profile, crops }) {
-  const items = briefingItems(alerts, agro, profile, crops);
-  return <ul className="briefing-list">{items.map((item) => <li key={item}>{item}</li>)}</ul>;
+function Briefing({ items }) {
+  return <ul className="briefing-list">{items.map(({ key, text }) => <li key={key}>{text}</li>)}</ul>;
 }
 
-// 底部滚动农情播报：常驻视口底部，点击可打开完整简报。
-function Ticker({ alerts, agro, profile, crops, onOpen }) {
-  const text = briefingItems(alerts, agro, profile, crops).join("　　◆　　");
-  return <footer className="ticker-bar" aria-label="农情播报" title="点击查看完整农情简报" onClick={onOpen}>
+// 底部滚动农情播报：常驻视口底部。生效中的官方预警固定在左侧、按级别着色，不参与滚动；
+// 其余条目循环滚动，点击直达对应详情。空白处点击打开完整简报。
+function Ticker({ items, onJump, onOpen }) {
+  const pinned = items.filter(({ pinned }) => pinned);
+  const rolling = items.filter(({ pinned }) => !pinned);
+  const track = (hidden) => <span aria-hidden={hidden || undefined}>
+    {rolling.map(({ key, text }, index) => <Fragment key={key}>
+      {index > 0 && <i className="ticker-sep" />}
+      <button type="button" className="ticker-item" tabIndex={hidden ? -1 : 0}
+        onClick={(event) => { event.stopPropagation(); onJump(key); }}>{text}</button>
+    </Fragment>)}
+  </span>;
+  return <footer className={`ticker-bar ${pinned.length ? "ticker-has-alert" : ""}`} aria-label="农情播报">
     <span className="ticker-label"><Broadcast size={15} /> 农情播报</span>
-    <div className="ticker-viewport">
-      <div className="ticker-track"><span>{text}</span><span aria-hidden="true">{text}</span></div>
+    {pinned.length > 0 && <div className="ticker-alerts">{pinned.map(({ key, view }) => {
+      const tone = alertTone(view.alert);
+      return <button key={key} type="button" className={`ticker-alert level-${tone}`} onClick={() => onJump(key)}>
+        <LevelBadge alert={view.alert} /><span>{view.alert.title}</span>
+      </button>;
+    })}</div>}
+    <div className="ticker-viewport" title="点击空白处查看完整农情简报" onClick={onOpen}>
+      <div className="ticker-track">{track(false)}{track(true)}</div>
     </div>
   </footer>;
 }
@@ -739,7 +765,7 @@ function CrossValidation({ agro, profile, onAlert }) {
 
 function RiskDetails({ risk, alerts, agro, profile, onAlert, onArchive, onRainfall }) {
   return <>
-    <h3 className="detail-heading">在效预警</h3>
+    <h3 className="detail-heading">生效预警</h3>
     <p>{alerts?.status !== "current" ? "官方预警暂不可查询，请查阅珠海市官方预警公告。" :
       alerts.alerts.length === 0 ? "本轮查询珠海市及斗门区无生效天气预警。" : `查询到 ${alerts.alerts.length} 条生效预警。`}</p>
     {alerts?.alerts?.map((alert) => <AlertRow alert={alert} key={alert.id} pulse onClick={() => onAlert(alert)} />)}
@@ -1026,7 +1052,9 @@ function CropCalendar() {
 }
 
 function ProductionRecords({ onField, onRisk, onWater, operations }) {
-  const ops = operations?.records ?? [];
+  // 例行巡田每天都有，只在统计里计数，不逐条列出。
+  const patrols = operations?.byType?.巡田 ?? 0;
+  const ops = (operations?.records ?? []).filter(({ type }) => type !== "巡田");
   const stats = operations?.byType ?? {};
   return <section id="production" className="production-records" aria-label="档案内容">
     <div className="record-head">
@@ -1037,13 +1065,14 @@ function ProductionRecords({ onField, onRisk, onWater, operations }) {
     {operations && <section className="panel operations-panel">
       <PanelTitle icon={ChartBar} title={`农事作业台账 · ${operations.month}`} />
       <div className="ops-summary">
-        <span>本月作业 <strong>{operations.monthTotal}</strong> 次</span>
-        {Object.entries(stats).slice(0, 6).map(([type, count]) => <em key={type}>{type} {count}</em>)}
+        <span>本月专项作业 <strong>{operations.monthTotal - patrols}</strong> 次</span>
+        <em>例行巡田 {patrols} 次</em>
+        {Object.entries(stats).filter(([type]) => type !== "巡田").slice(0, 6).map(([type, count]) => <em key={type}>{type} {count}</em>)}
       </div>
       {ops.length ? <ReadingTable head={["日期", "时间", "作业类型", "作物 / 区域", "作业内容与面积"]}
         rows={ops.slice(0, 8).map(({ date, time, type, crop, scope, area, note }) => [
           date.slice(5).replace("-", "/"), time, type, `${crop} · ${scope}`, area ? `${note}（${area} 亩）` : note,
-        ])} /> : <p className="detail-empty">暂无作业记录。</p>}
+        ])} /> : <p className="detail-empty">本月暂无专项作业记录。</p>}
       {operations.asOf && <p className="crop-note">记录截至 {monthDay(operations.asOf)}（农业气象日值按日发布）。</p>}
     </section>}
     <div className="production-grid">
@@ -1436,9 +1465,9 @@ function ShortcutsHelp() {
 }
 
 // 首屏自适应：把「标题 + 指标条 + 三栏看板」整体放进页头以下、播报条以上的一屏内。
-// 窗口模式只在轻微放不下（缩放比不低于 0.9）时整体微缩，否则保留页面滚动；
-// 全屏模式或地址带 ?fit=1（展厅、值班大屏直接打开）时始终完整显示。
-const FIT_MIN_SCALE = 0.9;
+// 窗口模式只在缩放比不低于 0.8 时整体微缩（1920×1080、1600×900、1440×900），否则保留页面滚动
+// （1366×768 约需 0.77）；全屏模式或地址带 ?fit=1（展厅、值班大屏直接打开）时始终完整显示。
+const FIT_MIN_SCALE = 0.8;
 const FIT_MIN_WIDTH = 1061;
 
 function useScreenFit() {
@@ -1475,23 +1504,36 @@ function useScreenFit() {
         if (Math.abs(target - zoom) < 0.004) break;
         zoom = target;
       }
-      if (document.fullscreenElement || forcedFit || zoom >= FIT_MIN_SCALE) apply(zoom, available / zoom);
-      else apply(1, null);
+      if (document.fullscreenElement || forcedFit || zoom >= FIT_MIN_SCALE) {
+        apply(zoom, available / zoom);
+        // 定稿后校验：迭代留有容差，内容若仍高出容器，就逐档再缩小，保证不压到播报条。
+        for (let guard = 0; guard < 6 && inner.scrollHeight > inner.clientHeight + 1; guard++) {
+          zoom = Number((zoom - 0.01).toFixed(4));
+          apply(zoom, available / zoom);
+        }
+      } else apply(1, null);
     };
-    let queued = 0;
+    // 调度不依赖 requestAnimationFrame 与 ResizeObserver：页面被遮挡或离屏渲染时这两者会被暂停，
+    // 而展厅大屏、值守窗口恰恰常处于这种状态。合并同一刻的多次触发，并定时复核（数据到达后面板高度会变）。
+    let timer = 0;
     const schedule = () => {
-      queued ||= window.requestAnimationFrame(() => { queued = 0; fit(); });
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => { timer = 0; fit(); }, 60);
     };
     const observer = new ResizeObserver(schedule);
     observer.observe(inner);
+    const ticker = document.querySelector(".ticker-bar");
+    if (ticker) observer.observe(ticker);
     window.addEventListener("resize", schedule);
     document.addEventListener("fullscreenchange", schedule);
+    const interval = window.setInterval(fit, 2000);
     fit();
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", schedule);
       document.removeEventListener("fullscreenchange", schedule);
-      window.cancelAnimationFrame(queued);
+      window.clearInterval(interval);
+      window.clearTimeout(timer);
     };
   }, []);
   return { frame, screen };
@@ -1519,6 +1561,14 @@ export function App() {
     close();
     document.getElementById("production")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+  // 农情简报：播报条与简报弹层共用同一份条目，点击直达对应详情。
+  const briefing = briefingItems(alerts, agro, profile, crops);
+  const jumpToBriefing = (key) => {
+    const item = briefing.find((entry) => entry.key === key);
+    if (!item) return;
+    if (item.view.type === "production") scrollToProduction();
+    else open(item.view.type, item.view);
+  };
   const openAlert = (alert, archived = false) => open("alert", { alert, archived });
   const openArchive = (color) => open("archive", { color });
   const openField = (photoId) => open("field", { photoId });
@@ -1530,7 +1580,7 @@ export function App() {
   const riskPages = ["risk", "storm", "alert", "archive", "rainfall", "actions"];
   const titles = { weather: "斗门天气实况", forecast: "斗门天气预报", soil: "土壤墒情监测",
     ndvi: "苗情长势（NDVI）", agro: "蒸散与灌溉决策", risk: "预警值守与农事处置", storm: "台风「桦加沙」", field: "斗门田间影像档案", replay: "番茄田灌溉试验回放（外部参考）",
-    map: "卫星底图与调研点位", archive: "斗门官方预警档案", alert: view?.archived ? "历史预警详情" : "在效预警详情",
+    map: "卫星底图与调研点位", archive: "斗门官方预警档案", alert: view?.archived ? "历史预警详情" : "生效预警详情",
     plot: PILOT_FIELD.name, links: "数据链路自检", help: "键盘快捷键", pest: "虫情测报灯", crops: "作物农事决策",
     report: "农情日报", briefing: "农情简报", rainfall: "斗门镇暴雨实测记录",
     actions: "农事处置", water: "斗门区域水环境", image: view?.image?.title };
@@ -1658,7 +1708,7 @@ export function App() {
         </div>
       </div>
       <DataLinksBar sources={dataLinks} onOpen={() => open("links")} />
-      <Ticker alerts={alerts} agro={agro} profile={profile} crops={crops} onOpen={() => open("briefing")} />
+      <Ticker items={briefing} onJump={jumpToBriefing} onOpen={() => open("briefing")} />
       <ProductionRecords onField={openField} onRisk={() => open("actions")} onWater={() => open("water")} operations={crops?.operations} />
       <footer className="app-footer">
         <span className="footer-brand"><Monitor size={15} /> 珠海斗门智慧农田监测</span>
@@ -1709,7 +1759,7 @@ export function App() {
       {view.type === "links" && <DataLinksDetails sources={dataLinks} />}
       {view.type === "water" && <WaterDetails />}
       {view.type === "crops" && <CropsDetails crops={crops} onLamp={() => open("pest")} onAgro={() => open("agro")} />}
-      {view.type === "briefing" && <Briefing alerts={alerts} agro={agro} profile={profile} crops={crops} />}
+      {view.type === "briefing" && <Briefing items={briefing} />}
       {view.type === "report" && <DailyReport observations={observations} profile={profile} agro={agro} alerts={alerts} risk={risk} crops={crops} />}
       {view.type === "help" && <ShortcutsHelp />}
       {view.type === "pest" && <PestLampDetails crops={crops} />}
