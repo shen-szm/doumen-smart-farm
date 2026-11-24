@@ -309,6 +309,8 @@ export const emptyCrops = Object.freeze({
   gdd: null,
   lamp: null,
   operations: null,
+  pestWindow: null,
+  dataThrough: null,
 });
 
 export function deriveCrops(weather, agro, now = () => Date.now()) {
@@ -335,6 +337,8 @@ export function deriveCrops(weather, agro, now = () => Date.now()) {
   }).sort((a, b) => b.last7 - a.last7);
   const lamp = lampRows.length ? {
     windowDays: lampRows.length,
+    from: recent7[0].date,
+    to: recent7.at(-1).date,
     total7: recent7.reduce((sum, row) => sum + row.total, 0),
     peakNight: recent7.reduce((best, row) => row.total > best.total ? row : best, recent7[0]),
     species: lampSpecies,
@@ -357,7 +361,12 @@ export function deriveCrops(weather, agro, now = () => Date.now()) {
     monthTotal: monthRecords.length,
     byType,
     latest: opRecords[0] ?? null,
+    asOf: opRecords[0]?.date ?? null,
   };
+  // 病虫适宜度「近 7 日」的真实区间。
+  const pestDays = daily.filter((day) => day.t2m != null && day.rh != null).slice(-7);
+  const pestWindow = { from: pestDays[0]?.date ?? null, to: pestDays.at(-1)?.date ?? null, days: pestDays.length };
+  const dataThrough = daily.filter((day) => day.t2m != null).at(-1)?.date ?? null;
 
   return {
     status: weather.status === 'current' && agro.status === 'current' ? 'current' : 'cached',
@@ -370,6 +379,8 @@ export function deriveCrops(weather, agro, now = () => Date.now()) {
     gdd: winterGdd(daily, now),
     lamp,
     operations,
+    pestWindow,
+    dataThrough,
     method: METHOD_NOTE,
   };
 }

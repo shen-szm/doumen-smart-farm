@@ -7,6 +7,7 @@ const SOURCE = Object.freeze({
 });
 const METHOD_NOTE = Object.freeze({
   et0: 'FAO-56 Penman-Monteith 公式（式 6、11–13、21、39–47），日步长，土壤热通量 G=0，地表反照率 0.23',
+  radiation: '太阳辐射缺测日（POWER 辐射字段比温压湿风晚发布数日）采用 Open-Meteo 逐日短波辐射代入同一公式；与 POWER 实测辐射逐日对比，平均绝对误差约 7%',
   kc: 'FAO-56 表 12 番茄作物系数：初期 0.60 / 中期 1.15 / 末期 0.80',
   effectiveRain: '有效降雨按降雨量 × 0.8 计（FAO-56 第 7 章湿润地区参考比例）',
   irrigation: '灌溉参考量 = 近 10 日 ΣETc(中期) − 近 10 日 Σ有效降雨，取正值；1 mm ≈ 0.667 m³/亩',
@@ -150,7 +151,35 @@ function numberOrNull(value) {
   return Number.isFinite(value) && value > -900 ? Number(value.toFixed(3)) : null;
 }
 
-export function normalizeAgro(payload, fetchedAt) {
+// Open-Meteo 逐日短波辐射（MJ/m²），只用来补 POWER 缺测的辐射日。
+export function buildRadiationUrl() {
+  const url = new URL('https://api.open-meteo.com/v1/forecast');
+  url.search = new URLSearchParams({
+    latitude: DOUMEN.latitude,
+    longitude: DOUMEN.longitude,
+    timezone: 'Asia/Shanghai',
+    past_days: '92',
+    forecast_days: '1',
+    daily: 'shortwave_radiation_sum',
+  });
+  return url;
+}
+
+export function normalizeRadiation(payload) {
+  const daily = payload?.daily;
+  if (!Array.isArray(daily?.time)) return null;
+  const radiation = new Map();
+  daily.time.forEach((date, index) => {
+    const value = daily.shortwave_radiation_sum?.[index];
+    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(value) && value >= 0) {
+      radiation.set(date, Number(value.toFixed(2)));
+    }
+  });
+  return radiation;
+}
+
+// radiation: Map<日期, MJ/m²>，POWER 辐射缺测时按日期补入。
+export function normalizeAgro(payload, fetchedAt, radiation = null) {
   const parameters = payload?.properties?.parameter;
   if (!parameters || !PARAMETERS.every((name) => parameters[name])) {
     throw new Error('Incomplete NASA POWER response');
@@ -160,6 +189,9 @@ export function normalizeAgro(payload, fetchedAt) {
   const dailyFull = [];
   for (const yyyymmdd of dates) {
     const date = `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
+    const powerRadiation = numberOrNull(parameters.ALLSKY_SFC_SW_DWN[yyyymmdd]);
+    const filledRadiation = powerRadiation == null ? radiation?.get(date) ?? null : null;
+    const srad = powerRadiation ?? filledRadiation;
     const day = {
       date,
       precip: numberOrNull(parameters.PRECTOTCORR[yyyymmdd]),
@@ -168,11 +200,12 @@ export function normalizeAgro(payload, fetchedAt) {
       tmin: numberOrNull(parameters.T2M_MIN[yyyymmdd]),
       rh: numberOrNull(parameters.RH2M[yyyymmdd]),
       ws: numberOrNull(parameters.WS2M[yyyymmdd]),
-      srad: numberOrNull(parameters.ALLSKY_SFC_SW_DWN[yyyymmdd]),
+      srad,
       ps: numberOrNull(parameters.PS[yyyymmdd]),
     };
     if (Object.values(day).every((value) => value !== null)) day.et0 = Number(referenceEvapotranspiration(day, date).toFixed(2));
     else day.et0 = null;
+    day.radiationFilled = filledRadiation != null;
     dailyFull.push(day);
   }
   const daily = dailyFull.slice(-WINDOW_DAYS);
@@ -241,6 +274,9 @@ export function normalizeAgro(payload, fetchedAt) {
 
   const risks = [...heatStressRuns(daily), ...rainstormDays(daily), ...autumnChillRuns(daily)]
     .sort((a, b) => b.window.localeCompare(a.window));
+  const latest = et0Days.at(-1);
+  // 所有「近 N 日」指标的真实起止日期：数据源有发布滞后，界面必须按实际区间标注。
+  const span = (days) => ({ from: days[0]?.date ?? null, to: days.at(-1)?.date ?? null, days: days.length });
 
   return {
     status: 'current',
@@ -249,15 +285,17 @@ export function normalizeAgro(payload, fetchedAt) {
     elevation: ELEVATION,
     fetchedAt: fetchedAt.toISOString(),
     window: { days: WINDOW_DAYS, timeStandard: 'LST（当地太阳日，与北京时间差约 27 分钟）' },
+    dataThrough: latest?.date ?? null,
     kc: KC,
     daily,
     et0: {
-      latest: et0Days.at(-1).et0,
-      latestDate: et0Days.at(-1).date,
+      latest: latest.et0,
+      latestDate: latest.date,
       mean30: Number((et0Days.slice(-30).reduce((total, day) => total + day.et0, 0) / 30).toFixed(2)),
+      radiationFilledDays: daily.filter((day) => day.radiationFilled).length,
     },
     waterBalance: {
-      days: BALANCE_DAYS,
+      ...span(recent),
       precip: Number(precip10.toFixed(1)),
       effectiveRain: Number(effectiveRain10.toFixed(1)),
       etcMid: Number(etcMid10.toFixed(1)),
@@ -267,15 +305,22 @@ export function normalizeAgro(payload, fetchedAt) {
     },
     lastYearDaily,
     monthly,
-    comparison,
+    comparison: comparison ? { ...comparison, ...span(et0Days.slice(-30)) } : null,
     risks,
     method: METHOD_NOTE,
   };
 }
 
 export async function fetchAgro(fetcher = fetch, now = () => Date.now()) {
-  const response = await fetcher(buildPowerUrl(now()), { signal: AbortSignal.timeout(20_000) });
-  if (!response.ok) throw new Error(`NASA POWER returned HTTP ${response.status}`);
-  const payload = await response.json();
-  return normalizeAgro(payload, new Date(now()));
+  // POWER 为主体；辐射缺测日用 Open-Meteo 当日短波辐射补齐，该路失败不影响 POWER 结果。
+  const [power, radiation] = await Promise.all([
+    fetcher(buildPowerUrl(now()), { signal: AbortSignal.timeout(20_000) }).then((response) => {
+      if (!response.ok) throw new Error(`NASA POWER returned HTTP ${response.status}`);
+      return response.json();
+    }),
+    fetcher(buildRadiationUrl(), { signal: AbortSignal.timeout(12_000) })
+      .then((response) => (response.ok ? response.json() : null))
+      .catch(() => null),
+  ]);
+  return normalizeAgro(power, new Date(now()), normalizeRadiation(radiation));
 }

@@ -273,6 +273,9 @@ const clockLabel = (iso, now = new Date()) => {
   const stamp = Number(iso.slice(8, 10));
   return `${stamp === day ? "今" : `${stamp}日`} ${iso.slice(11, 16)}`;
 };
+// 「近 N 日」的真实区间：数据源有发布滞后，统计窗口按实际起止日期标注。
+const monthDay = (date) => date?.slice(5).replace("-", "/") ?? "";
+const spanLabel = (span) => span?.from ? `${monthDay(span.from)}–${monthDay(span.to)}` : "";
 
 function AgroPanel({ agro, crops, onOpen, onCrops, onReplay }) {
   const balance = agro?.waterBalance;
@@ -289,7 +292,7 @@ function AgroPanel({ agro, crops, onOpen, onCrops, onReplay }) {
         <small>近 30 日均 {number(agro?.et0?.mean30, 2)} mm/d</small>
       </div>
       <div className="agro-balance">
-        <div><span>近 10 日降雨</span><strong>{number(balance?.precip, 1)} <small>mm</small></strong></div>
+        <div><span>近 10 日降雨{balance?.to && <em> 至 {monthDay(balance.to)}</em>}</span><strong>{number(balance?.precip, 1)} <small>mm</small></strong></div>
         <div><span>需水 ETc（番茄中期）</span><strong>{number(balance?.etcMid, 1)} <small>mm</small></strong></div>
       </div>
     </div>
@@ -339,7 +342,7 @@ function briefingItems(alerts, agro, profile, crops) {
   if (pestHot) items.push(`病虫提示：${pestHot.pest}气象适宜度高，${pestHot.action.split("；")[0]}`);
   if (crops?.lamp) {
     const top = crops.lamp.species[0];
-    if (top) items.push(`虫情灯诱：近 7 日合计 ${number(crops.lamp.total7)} 头 · 优势种 ${top.name}（周环比 ${top.trend > 0 ? "+" : ""}${top.trend ?? 0}%）`);
+    if (top) items.push(`虫情灯诱：近 7 日（${spanLabel(crops.lamp)}）合计 ${number(crops.lamp.total7)} 头 · 优势种 ${top.name}（周环比 ${top.trend > 0 ? "+" : ""}${top.trend ?? 0}%）`);
   }
   const latestOp = crops?.operations?.latest;
   if (latestOp) items.push(`农事作业：${latestOp.date.slice(5).replace("-", "/")} ${latestOp.type} · ${latestOp.crop}${latestOp.area ? ` ${latestOp.area} 亩` : ""}`);
@@ -554,8 +557,10 @@ function AgroDetails({ agro, weather, onReplay, onWater }) {
       ["计算方法", agro?.method?.et0 ?? "FAO-56 Penman-Monteith"],
       ["作物系数", agro?.method?.kc ?? "FAO-56 表 12"],
       ["最新 ET0", agro?.et0 ? `${number(agro.et0.latest, 2)} mm/d（${agro.et0.latestDate}）` : "—"],
+      ["数据截至", agro?.dataThrough ?? "—（农业气象日值按日发布，落后 3–4 天）"],
       ["近 30 日均值", `${number(agro?.et0?.mean30, 2)} mm/d`],
       ["有效降雨", agro?.method?.effectiveRain ?? "降雨 × 0.8"],
+      ["辐射数据", agro?.method?.radiation ?? "—"],
     ]} />
     {comparison && <h3 className="detail-heading">近 30 日同期同比（vs 去年）</h3>}
     {comparison && <Metadata rows={[
@@ -568,7 +573,7 @@ function AgroDetails({ agro, weather, onReplay, onWater }) {
       <MonthlyChart monthly={agro.monthly} />
       <p className="muted">当月为进行中的统计（天数不齐），NASA POWER LST 日值汇总。</p>
     </> : null}
-    <h3 className="detail-heading">近 {balance?.days ?? 10} 日水分平衡</h3>
+    <h3 className="detail-heading">近 {balance?.days ?? 10} 日水分平衡{balance?.from && `（${spanLabel(balance)}）`}</h3>
     <Metadata rows={[
       ["降雨量", `${number(balance?.precip, 1)} mm`],
       ["有效降雨", `${number(balance?.effectiveRain, 1)} mm`],
@@ -595,7 +600,7 @@ function AgroDetails({ agro, weather, onReplay, onWater }) {
 
 // 作物农事决策详情：生育期农事、喷药作业窗口、病虫气象适宜度、冬种积温。
 function CropsDetails({ crops, onLamp }) {
-  const { stages = [], sprayWindows = [], pests = [], gdd, method } = crops ?? {};
+  const { stages = [], sprayWindows = [], pests = [], pestWindow, gdd, method } = crops ?? {};
   const month = new Intl.DateTimeFormat("zh-CN", { timeZone: shanghai, month: "long" }).format(new Date());
   return <>
     <span className="subtle-tag">作物农事决策 · 派生数据</span>
@@ -617,7 +622,7 @@ function CropsDetails({ crops, onLamp }) {
       <strong>{pest.pest} · 适宜度{pest.level ?? "—"}{!pest.seasonal ? "（非敏感期）" : ""}</strong>
       <small>寄主：{pest.host}</small>
       <span>适宜条件：{pest.condition}</span>
-      <span>近 7 日 {pest.recentPct ?? "—"}% 日数适宜 · 未来 48 小时 {pest.forecastPct ?? "—"}% 时数适宜</span>
+      <span>近 7 日（{spanLabel(pestWindow)}）{pest.recentPct ?? "—"}% 日数适宜 · 未来 48 小时 {pest.forecastPct ?? "—"}% 时数适宜</span>
       <small>{pest.action}</small>
     </div>)}</div>
     <p className="muted">{method?.pest}</p>
@@ -763,6 +768,7 @@ function PestLampDetails({ crops }) {
         <div className="metric"><span><Sun size={16} />峰值夜</span><strong>{lamp.peakNight?.date?.slice(5).replace("-", "/")} <small>{number(lamp.peakNight?.total)} 头</small></strong></div>
         <div className="metric"><span><Scan size={16} />AI 识别率</span><strong>{number(lamp.identifyRate, 1)} <small>%</small></strong></div>
       </div>
+      <p className="muted">统计区间：{lamp.from} 至 {lamp.to}（近 7 日），时序数据截至 {lamp.to}。</p>
       <PestChart series={lamp.series} featured />
       <h3 className="detail-heading">种类构成 · 近 {lamp.windowDays} 日时序</h3>
       <ReadingTable head={["虫种", "寄主", "近 7 日 (头)", "近 30 日 (头)", "周环比"]}
@@ -1029,6 +1035,7 @@ function ProductionRecords({ onField, onRisk, onWater, operations }) {
         rows={ops.slice(0, 8).map(({ date, time, type, crop, scope, area, note }) => [
           date.slice(5).replace("-", "/"), time, type, `${crop} · ${scope}`, area ? `${note}（${area} 亩）` : note,
         ])} /> : <p className="detail-empty">暂无作业记录。</p>}
+      {operations.asOf && <p className="crop-note">记录截至 {monthDay(operations.asOf)}（农业气象日值按日发布）。</p>}
     </section>}
     <div className="production-grid">
       <section className="panel production-stats">
