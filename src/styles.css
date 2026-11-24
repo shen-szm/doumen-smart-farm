@@ -235,6 +235,9 @@ button.cross-row:hover span strong { color: var(--mint); }
 .report-sheet .report-table th, .report-sheet .report-table td { white-space: normal; overflow-wrap: anywhere; padding: 6px 8px; }
 .report-note { margin-top: 9px; color: #5b7280; font-size: 12.5px; }
 .report-alerts p { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+/* 同一节里连续的多张表与说明行之间留出间距 */
+.report-section .report-table + .report-table { margin-top: 8px; }
+.report-section > p:not(.report-note) { margin-top: 8px; }
 .report-advice { padding-left: 22px; }
 .report-advice li { margin-bottom: 8px; }
 .report-foot { margin-top: 26px; padding-top: 12px; border-top: 1px solid #c4d3dd; color: #5b7280; font-size: 12px; }

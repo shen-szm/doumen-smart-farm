@@ -1117,12 +1117,14 @@ function ReadingTable({ head, rows }) {
   return <div className="reading-table"><ReportTable head={head} rows={rows} /></div>;
 }
 
-function DailyReport({ observations, profile, agro, alerts, risk, printing = false }) {
+function DailyReport({ observations, profile, agro, alerts, risk, crops, printing = false }) {
   const current = observations?.current;
   const latest = profile?.days?.at(-1);
   const balance = agro?.waterBalance;
+  const balances = (agro?.balances ?? []).filter(({ irrigable }) => irrigable);
   const official = alerts?.alerts ?? [];
   const irrigate = balance != null && balance.irrigationRefMm > 0;
+  const spray = crops?.sprayWindows?.[0];
   const term = solarTerm();
   const date = new Intl.DateTimeFormat("zh-CN", { timeZone: shanghai, dateStyle: "full" }).format(new Date());
   const layerRow = ({ id, depth, label }) => latest ? [
@@ -1136,6 +1138,7 @@ function DailyReport({ observations, profile, agro, alerts, risk, printing = fal
         {printing && <h2>斗门区农情日报</h2>}
         <p><strong>珠海市斗门区</strong> · {date} · {term.name}</p>
         {current?.time && <p>斗门站观测时间 {formatTime(current.time)}{observations.status === "cached" ? " · 最近记录" : ""}</p>}
+        <p>数据截至：农业气象日值 {agro?.dataThrough ?? "—"} · 土壤墒情 {latest?.date ?? "—"}</p>
       </header>
 
       <div className="report-sections">
@@ -1167,11 +1170,27 @@ function DailyReport({ observations, profile, agro, alerts, risk, printing = fal
           [`近 10 日作物需水 ETc（${balance?.name ?? "—"} · ${balance?.stage ?? ""}，Kc ${number(balance?.kc, 2)}）`, `${number(balance?.etc, 1)} mm`],
           ["灌溉参考", !balance ? "本月无区域灌溉参考作物" : irrigate ? `建议灌溉 ${number(balance.irrigationRefMm, 1)} mm ≈ ${number(balance.irrigationRefM3PerMu, 1)} m³/亩` : "水分盈余，暂无需灌溉"],
         ]} />
-        <p className="report-note">输入为 NASA POWER 农业气象日值，ET0 按 FAO-56 Penman-Monteith 计算，有效降雨按 0.8 计；作物系数按农事日历取当月在田作物。</p>
+        <p className="report-note">输入为 NASA POWER 农业气象日值（截至 {agro?.dataThrough ?? "—"}），ET0 按 FAO-56 Penman-Monteith 计算，有效降雨按 0.8 计；作物系数按农事日历取当月在田作物。</p>
+        {balances.length > 0 && <ReportTable head={["在田作物", "生育期", "近 10 日需水 ETc (mm)", "灌溉参考 (mm)"]}
+          rows={balances.map((item) => [item.name, item.stage, number(item.etc, 1), item.irrigable ? number(item.irrigationRefMm, 1) : "不纳入"])} />}
       </section>
 
+      {crops?.stages?.length > 0 && <section className="report-section">
+        <h3>四、作物农事与病虫</h3>
+        <ReportTable head={["作物", "生育期", "农事要点"]} rows={crops.stages.map(({ name, stage, focus }) => [name, stage, focus])} />
+        {crops.sprayWindows?.length > 0 && <ReportTable head={["喷药作业窗口（未来 48 小时）", "时长", "最大风速 (km/h)"]}
+          rows={crops.sprayWindows.map(({ start, end, hours, windPeak }) => [`${clockLabel(start)} – ${end.slice(11, 16)}`, `${hours} 小时`, number(windPeak, 1)])} />}
+        {crops.pests?.length > 0 && <ReportTable head={["病虫", "气象适宜度", `近 7 日适宜日数占比（${spanLabel(crops.pestWindow)}）`, "未来 48 小时适宜时数占比"]}
+          rows={crops.pests.map((pest) => [pest.pest, `${pest.level ?? "—"}${pest.seasonal ? "" : "（非敏感期）"}`, `${pest.recentPct ?? "—"}%`, `${pest.forecastPct ?? "—"}%`])} />}
+        {crops.lamp && <p>虫情灯诱：{spanLabel(crops.lamp)} 合计 {number(crops.lamp.total7)} 头，优势种 {crops.lamp.species[0]?.name}
+          （近 7 日 {number(crops.lamp.species[0]?.last7)} 头，周环比 {crops.lamp.species[0]?.trend > 0 ? "+" : ""}{crops.lamp.species[0]?.trend ?? 0}%）。</p>}
+        {crops.operations && <p>农事作业台账（{crops.operations.month}）：本月 {crops.operations.monthTotal} 次，
+          {Object.entries(crops.operations.byType).map(([type, count]) => `${type} ${count} 次`).join("、")}；记录截至 {monthDay(crops.operations.asOf)}。</p>}
+        <p className="report-note">喷药窗口与病虫气象适宜度由逐时预报和农业气象日值判定；{crops.method?.pest}</p>
+      </section>}
+
       <section className="report-section">
-        <h3>四、预警与农气事件</h3>
+        <h3>五、预警与农气事件</h3>
         {official.length ? <div className="report-alerts">{official.map((alert) => <p key={alert.id}>
           <LevelBadge alert={alert} /> {alert.title} · {alert.area ?? "见原文"} · {formatTime(alert.startsAt, "date")} 发布</p>)}</div>
           : <p>{alerts?.status === "current" ? `当前无生效气象预警（${formatTime(alerts.fetchedAt, "date")} 查询）` : "官方预警暂不可查询"}。</p>}
@@ -1183,19 +1202,22 @@ function DailyReport({ observations, profile, agro, alerts, risk, printing = fal
       </section>
 
       <section className="report-section">
-        <h3>五、农事建议</h3>
+        <h3>六、农事建议</h3>
         <ol className="report-advice">
           <li><strong>农时</strong>：{term.name} · {term.advice}（距{term.nextName} {term.daysToNext} 天）。</li>
           <li><strong>水分管理</strong>：{!balance ? "本月无区域灌溉参考作物，按田间巡查记录安排灌排。" : irrigate
             ? `${balance.name}（${balance.stage}）水分平衡给出 ${number(balance.irrigationRefMm, 1)} mm 补水参考量，结合田间含水情况安排。`
             : `有效降雨已覆盖${balance.name}（${balance.stage}）参考需水量，巡查排水和积水点。`}</li>
+          {crops?.stages?.length > 0 && <li><strong>植保作业</strong>：{spray
+            ? `未来 48 小时昼间最近适宜喷药时段为 ${clockLabel(spray.start)} – ${spray.end.slice(11, 16)}（最大风速 ${number(spray.windPeak, 1)} km/h），避开大风与降雨时段。`
+            : "未来 48 小时昼间暂无连续 2 小时以上的适宜喷药窗口，待风速回落、降雨间歇后再安排。"}</li>}
           <li><strong>巡查重点</strong>：{risk.high ? "关注低洼地块积水与排水沟渠畅通。" : "常规巡查田埂、沟渠与设施固定件。"}</li>
         </ol>
       </section>
       </div>
 
       <footer className="report-foot">
-        <p>数据来源：中国天气网 · Open-Meteo · ERA5-Land · NASA POWER</p>
+        <p>数据来源：中国天气网 · Open-Meteo · ECMWF ERA5-Land · NASA POWER</p>
         <p>生成时间：{new Intl.DateTimeFormat("zh-CN", { timeZone: shanghai, dateStyle: "short", timeStyle: "medium", hourCycle: "h23" }).format(new Date())} · 斗门智慧农田监测平台</p>
       </footer>
   </article>;
@@ -1688,7 +1710,7 @@ export function App() {
       {view.type === "water" && <WaterDetails />}
       {view.type === "crops" && <CropsDetails crops={crops} onLamp={() => open("pest")} onAgro={() => open("agro")} />}
       {view.type === "briefing" && <Briefing alerts={alerts} agro={agro} profile={profile} crops={crops} />}
-      {view.type === "report" && <DailyReport observations={observations} profile={profile} agro={agro} alerts={alerts} risk={risk} />}
+      {view.type === "report" && <DailyReport observations={observations} profile={profile} agro={agro} alerts={alerts} risk={risk} crops={crops} />}
       {view.type === "help" && <ShortcutsHelp />}
       {view.type === "pest" && <PestLampDetails crops={crops} />}
       {view.type === "map" && <>
@@ -1707,7 +1729,7 @@ export function App() {
       </>}
     </Details>}
     {view?.type === "report" && <div className="print-report">
-      <DailyReport observations={observations} profile={profile} agro={agro} alerts={alerts} risk={risk} printing />
+      <DailyReport observations={observations} profile={profile} agro={agro} alerts={alerts} risk={risk} crops={crops} printing />
     </div>}
   </>;
 }
