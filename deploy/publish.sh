@@ -110,13 +110,15 @@ echo "$HEALTH" | sed 's/^/   /'
 SERVED=$(grep '^served=' <<<"$HEALTH" | cut -d= -f2)
 BUNDLE_HTTP=$(grep '^bundle_http=' <<<"$HEALTH" | cut -d= -f2)
 CROPS_HTTP=$(grep '^crops_http=' <<<"$HEALTH" | cut -d= -f2)
-if [ "$SERVED" != "assets/$BUNDLE" ] || [ "$BUNDLE_HTTP" != 200 ] || [ "$CROPS_HTTP" != 200 ]; then
+# 站点与产物必须正常；/api/crops 只作提示——回滚到没有该接口的旧版本时不应判为失败
+if [ "$SERVED" != "assets/$BUNDLE" ] || [ "$BUNDLE_HTTP" != 200 ]; then
   cat >&2 <<EOF
-健康检查未通过：线上提供的产物与构建结果不一致或接口异常。
+健康检查未通过：线上提供的产物与构建结果不一致或站点不可访问。
 回滚: bash deploy/rollback.sh $PREVIOUS
 EOF
   log "失败：健康检查未通过"; exit 1
 fi
+[ "$CROPS_HTTP" = 200 ] || echo "提示：/api/crops 返回 $CROPS_HTTP（回滚到较早版本时属正常，该版本没有此接口）"
 
 # ---- 6. 只有全部通过才移动 live 指针 ----
 git branch -f live "$COMMIT"
