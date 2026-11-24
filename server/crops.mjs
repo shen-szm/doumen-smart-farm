@@ -1,4 +1,5 @@
 import { DOUMEN } from './weather.mjs';
+import { cropStagesFor, monthIndexOf } from '../src/cropCalendar.js';
 
 // 作物农事决策引擎：全部由平台已有真实数据源派生（Open-Meteo 48 小时逐时 + NASA POWER 日值），
 // 不新增外部依赖。三类模型：生育期农事（日历驱动）、喷药作业窗口（逐时气象条件扫描）、
@@ -8,61 +9,17 @@ const SOURCE = Object.freeze({
   url: 'https://open-meteo.com/en/docs',
 });
 const METHOD_NOTE = Object.freeze({
+  calendar: '生育期取自平台农事日历（依据广东省水稻、荔枝栽培技术规程与斗门镇调研整理），与「作物农事日历」表同源',
   spray: '喷药适宜条件：昼间（07–17 时）时雨量 < 0.1 mm、风速 < 15 km/h（≈蒲福 3 级下限，防飘移）、气温 10–30℃，连续 ≥ 2 小时计为一个作业窗口',
   pest: '病虫气象适宜度为温湿度阈值法（逐日 / 逐时判定后取占比），提示发生风险倾向，非田间实测虫情；阈值参考全国农技推广中心测报技术资料与广东省农科院植保所公开技术资料',
-  gdd: '有效积温 GDD = max(0, (日最高温 + 日最低温) ÷ 2 − 10℃)，基础温度 10℃，自当年 11 月 1 日（冬种蔬菜整地播种参考期）起累计',
+  gdd: '有效积温 GDD = max(0, (日最高温 + 日最低温) ÷ 2 − 10℃)，基础温度 10℃，自当年 11 月 1 日（冬种蔬菜定植期）起累计',
 });
 
 // ============ 生育期农事（日历驱动，斗门主栽：双季稻 / 冬种蔬菜 / 荔枝） ============
-// 依据：珠海市农业农村局种粮扶持通知（插秧期）、广东省农业科学院公开农事月历。
-const STAGE_TABLE = Object.freeze({
-  rice: [
-    { months: [1, 2], stage: '备耕期', focus: '冬闲田翻耕晒白、农资准备；2 月下旬早造浸种催芽' },
-    { months: [3], stage: '早造插秧期', focus: '3 月上中旬插秧（市级种粮扶持对应插秧期 3/1–4/20），插后浅水回青' },
-    { months: [4], stage: '分蘖期', focus: '够苗晒田，防治稻纵卷叶螟、纹枯病' },
-    { months: [5], stage: '拔节孕穗期', focus: '保水养胎，关注“龙舟水”强降雨排涝' },
-    { months: [6], stage: '抽穗灌浆期', focus: '高温热害与暴雨防范（QX/T 208-2013），适期收获前断水' },
-    { months: [7], stage: '早造收获 / 晚造育秧', focus: '7 月上中旬抢晴收获，下旬晚造播种' },
-    { months: [8], stage: '晚造插秧期', focus: '晚造插秧（扶持插秧期 7/10–8/20），台风高发期关注预警' },
-    { months: [9], stage: '分蘖拔节期', focus: '够苗露晒田，9 月下旬起进入寒露风敏感期' },
-    { months: [10], stage: '抽穗灌浆期', focus: '寒露风监测（GB/T 34816-2017），灌浆期保持湿润' },
-    { months: [11], stage: '晚造收获期', focus: '11 月上中旬抢晴收获，稻草还田，冬种接茬' },
-    { months: [12], stage: '冬闲期', focus: '冬闲田翻耕、绿肥或油菜轮作培肥' },
-  ],
-  vegetable: [
-    { months: [11], stage: '整地播种 / 移栽期', focus: '晚稻收获后接茬整地，菜心、白菜等秋播冬种，基肥足、畦面高' },
-    { months: [12], stage: '田间生长期', focus: '薄肥勤施，关注霜霉病高湿适宜期，寒潮前覆膜防寒' },
-    { months: [1], stage: '采收期', focus: '分批采收，防寒防冻（最低温 ≤ 5℃ 预警），雨后及时排水' },
-    { months: [2], stage: '采收末期 / 清园', focus: '采收收尾、清园消毒，筹划早造水稻或春季瓜豆轮作' },
-    { months: [3, 4, 5, 6, 7, 8, 9, 10], stage: '非主季（瓜豆类交替）', focus: '以瓜豆类为主的春夏茬口，冬种主季为 11 月至次年 2 月' },
-  ],
-  lychee: [
-    { months: [11], stage: '秋梢老熟 / 冬梢控制期', focus: '末次秋梢老熟后控冬梢（螺旋环剥 / 断根晾根），清园压低越冬病虫基数' },
-    { months: [12], stage: '花芽分化期', focus: '控梢促花，清园深翻改土，冬季清园修剪' },
-    { months: [1], stage: '花芽分化期', focus: '继续控梢促花，防寒护树，适度冷量积累利于成花' },
-    { months: [2], stage: '现蕾期', focus: '花穗抽生期控穗，防“倒春寒”损伤花穗' },
-    { months: [3], stage: '开花期', focus: '花期避雨避药，辅助授粉，防荔枝蝽与霜疫霉初侵染' },
-    { months: [4], stage: '幼果期', focus: '保果壮果，防治蒂蛀虫、荔枝蝽（化学防治关键期）' },
-    { months: [5], stage: '果实膨大期', focus: '防裂果、防落果，高湿年份防霜疫霉爆发' },
-    { months: [6], stage: '采收期', focus: '桂味、糯米糍等中晚熟种 6 月采收，采后及时修剪' },
-    { months: [7], stage: '采后修剪期', focus: '采后修剪清园，施“采后肥”恢复树势' },
-    { months: [8, 9], stage: '秋梢培养期', focus: '培养 2–3 次健壮秋梢作结果母枝' },
-    { months: [10], stage: '秋梢老熟期', focus: '末次秋梢转绿老熟，为花芽分化积累养分' },
-  ],
-});
-
-const CROP_META = Object.freeze([
-  { id: 'rice', name: '水稻（双季稻）', scale: '斗门区粮食主栽 · 早造 + 晚稻轮作', table: STAGE_TABLE.rice },
-  { id: 'vegetable', name: '冬种蔬菜', scale: '菜心、白菜类等 · 11 月至次年 2 月主季', table: STAGE_TABLE.vegetable },
-  { id: 'lychee', name: '荔枝', scale: '桂味、糯米糍等 · 斗门镇特色果树', table: STAGE_TABLE.lychee },
-]);
-
+// 生育期名称与大屏「作物农事日历」出自同一份数据（src/cropCalendar.js），两处不会出现口径不一致。
 export function cropStages(now = () => Date.now()) {
-  const month = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Shanghai', month: 'numeric' }).format(new Date(now())));
-  return CROP_META.map(({ id, name, scale, table }) => {
-    const entry = table.find(({ months }) => months.includes(month));
-    return { id, name, scale, month, stage: entry.stage, focus: entry.focus };
-  });
+  const month = monthIndexOf(new Date(now()));
+  return cropStagesFor(month).map(({ id, name, stage, focus, irrigable, kc }) => ({ id, name, month: month + 1, stage, focus, irrigable, kc }));
 }
 
 // ============ 喷药作业窗口（未来 48 小时逐时扫描） ============
@@ -168,14 +125,17 @@ function pestSuitability(agroDaily, hourlyExt, month) {
 
 // ============ 冬种蔬菜有效积温（自当年 11 月 1 日累计） ============
 function winterGdd(agroDaily, now = () => Date.now()) {
-  const year = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Shanghai', year: 'numeric' }).format(new Date(now()));
-  const start = `${year}-11-01`;
-  const days = (agroDaily ?? []).filter(({ date, tmax, tmin }) => date >= start && tmax != null && tmin != null);
+  const date = new Date(now());
+  const year = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Shanghai', year: 'numeric' }).format(date));
+  // 冬种季从 11 月 1 日起算；跨年后到次年 10 月之前仍归上一年的冬季。
+  const seasonStart = `${monthIndexOf(date) >= 10 ? year : year - 1}-11-01`;
+  const days = (agroDaily ?? []).filter(({ date, tmax, tmin }) => date >= seasonStart && tmax != null && tmin != null);
   if (!days.length) return null;
   const daily = days.map(({ date, tmax, tmin }) => ({ date, gdd: Number(Math.max(0, (tmax + tmin) / 2 - 10).toFixed(1)) }));
   const cumulative = Number(daily.reduce((total, { gdd }) => total + gdd, 0).toFixed(0));
   const sownDays = daily.length;
-  return { since: start, days: sownDays, cumulative, dailyMean: Number((cumulative / sownDays).toFixed(1)), daily: daily.slice(-30) };
+  // since 取窗口内实际可用的首日：日值数据只有近 90 日，跨年后的累计不覆盖整个冬种季。
+  return { since: daily[0].date, days: sownDays, cumulative, dailyMean: Number((cumulative / sownDays).toFixed(1)), daily: daily.slice(-30) };
 }
 
 // ============ 虫情灯诱时序（测报灯端侧回传口径） ============
@@ -289,7 +249,7 @@ function operationsLedger(daily) {
       pushOp(records, date, '08:40', '机械收获', '晚稻', '大濠冲高产片', 45, '全喂入式收割机抢晴收获，稻草粉碎还田');
     }
     if (month === 11 && date.endsWith('-05')) {
-      pushOp(records, date, '09:00', '整地播种', '冬种蔬菜', '接茬地块', 30, '旋耕起垄 + 菜心 / 白菜直播，亩施有机肥 800 kg');
+      pushOp(records, date, '09:00', '整地定植', '冬种蔬菜', '接茬地块', 30, '旋耕起垄 + 菜心 / 白菜定植，亩施有机肥 800 kg');
     }
     if (month === 11 && date.endsWith('-20')) {
       pushOp(records, date, '09:10', '追肥', '冬种蔬菜', '节灌区', 30, '水肥一体化追施高氮水溶肥（亩 6 kg）');

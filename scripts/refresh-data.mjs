@@ -4,6 +4,7 @@ import { fetchRegionalWeather } from '../server/weather.mjs';
 import { fetchObservations } from '../server/observations.mjs';
 import { fetchSoilProfile } from '../server/soil.mjs';
 import { fetchAgro } from '../server/agro.mjs';
+import { deriveCrops } from '../server/crops.mjs';
 
 const dataDir = new URL('../public/data/', import.meta.url);
 const indexUrl = 'https://data.mendeley.com/public-api/datasets/35wh56287y/files?folder_id=root&version=2';
@@ -119,6 +120,8 @@ if (options.some((option) => !validOptions.includes(option)) || (csvDirectory &&
 
 await mkdir(dataDir, { recursive: true });
 const tasks = [];
+let weatherSnapshot = null;
+let agroSnapshot = null;
 if (!options.length || options.includes('--observations')) {
   tasks.push(fetchObservations().then(async (observations) => {
     if (!observations.current?.time) throw new Error('Observation snapshot is missing the current record');
@@ -133,6 +136,7 @@ if (!options.length || options.includes('--weather')) {
     if (weather.hourly.length !== 24 || !weather.soil.some(({ moisture }) => moisture !== null)) {
       throw new Error('Open-Meteo snapshot is missing required records');
     }
+    weatherSnapshot = weather;
     await writeDataset('weather-snapshot.json', { ...weather, status: 'cached' });
     console.log(`Open-Meteo snapshot ${weather.fetchedAt}, ${weather.hourly.length} forecast hours and ${weather.soil.length} soil readings`);
   }));
@@ -151,8 +155,9 @@ if (!options.length || options.includes('--agro')) {
     if (agro.daily.length < 30 || !Number.isFinite(agro.et0.latest)) {
       throw new Error('Agro snapshot is missing required records');
     }
+    agroSnapshot = agro;
     await writeDataset('agro-snapshot.json', { ...agro, status: 'cached' });
-    console.log(`Agro snapshot ${agro.fetchedAt}, ${agro.daily.length} days, ET0 ${agro.et0.latestDate} = ${agro.et0.latest} mm/d, ${agro.risks.length} risk events`);
+    console.log(`Agro snapshot ${agro.fetchedAt}, ${agro.daily.length} days, ET0 ${agro.et0.latestDate} = ${agro.et0.latest} mm/d, ${agro.risks.length} risk events, reference crop ${agro.referenceCrop?.name} (${agro.referenceCrop?.stage})`);
   }));
 }
 if (!options.length || options.includes('--replay')) {
@@ -162,3 +167,10 @@ if (!options.length || options.includes('--replay')) {
   }));
 }
 await Promise.all(tasks);
+
+// 作物决策快照由天气与农业气象两份快照派生，本次两者都刷新时才重写。
+if (weatherSnapshot && agroSnapshot) {
+  const crops = deriveCrops(weatherSnapshot, agroSnapshot);
+  await writeDataset('crops-snapshot.json', { ...crops, status: 'cached' });
+  console.log(`Crop decisions snapshot ${crops.fetchedAt}, ${crops.stages.length} crops, ${crops.sprayWindows.length} spray windows, lamp ${crops.lamp?.total7} in 7 days`);
+}

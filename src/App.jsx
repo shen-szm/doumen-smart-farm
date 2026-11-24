@@ -280,7 +280,7 @@ const clockLabel = (iso, now = new Date()) => {
 const monthDay = (date) => date?.slice(5).replace("-", "/") ?? "";
 const spanLabel = (span) => span?.from ? `${monthDay(span.from)}–${monthDay(span.to)}` : "";
 
-function AgroPanel({ agro, crops, onOpen, onCrops, onReplay }) {
+function AgroPanel({ agro, crops, onOpen, onCrops }) {
   const balance = agro?.waterBalance;
   const irrigate = balance != null && balance.irrigationRefMm > 0;
   const spray = crops?.sprayWindows?.[0];
@@ -296,7 +296,8 @@ function AgroPanel({ agro, crops, onOpen, onCrops, onReplay }) {
       </div>
       <div className="agro-balance">
         <div><span>近 10 日降雨{balance?.to && <em> 至 {monthDay(balance.to)}</em>}</span><strong>{number(balance?.precip, 1)} <small>mm</small></strong></div>
-        <div><span>需水 ETc（番茄中期）</span><strong>{number(balance?.etcMid, 1)} <small>mm</small></strong></div>
+        <div><span>需水 ETc</span><strong>{number(balance?.etc, 1)} <small>mm</small></strong>
+          <small className="agro-crop" title="本月区域灌溉参考作物及生育期（取自农事日历）">{balance ? `${balance.name} · ${balance.stage}` : "本月无区域灌溉参考"}</small></div>
       </div>
     </div>
     <div className="risk-links agro-decision">
@@ -310,10 +311,10 @@ function AgroPanel({ agro, crops, onOpen, onCrops, onReplay }) {
       </button>
     </div>
     <button type="button" className={`agro-advice ${irrigate ? "agro-advice-irrigate" : ""}`} onClick={onOpen} title="查看蒸散与灌溉决策详情">
-      {!balance ? "水量平衡数据暂不可用" : irrigate ? <><Drop size={17} /> 参考补水 {number(balance.irrigationRefMm, 1)} mm</>
-        : <><ShieldCheck size={17} /> 有效降雨覆盖作物参考需水量</>}
+      {!balance ? "本月无区域灌溉参考作物" : irrigate ? <><Drop size={17} /> {balance.name}参考补水 {number(balance.irrigationRefMm, 1)} mm</>
+        : <><ShieldCheck size={17} /> 有效降雨覆盖{balance.name}参考需水量</>}
     </button>
-    <button type="button" className="primary-button" onClick={onReplay}><PlayCircle size={20} /> 番茄田实测回放 <ArrowUpRight size={16} /></button>
+    <button type="button" className="primary-button" onClick={onCrops}><Plant size={20} /> 作物农事决策 <ArrowUpRight size={16} /></button>
   </section>;
 }
 
@@ -329,8 +330,8 @@ function briefingItems(alerts, agro, profile, crops) {
   const balance = agro?.waterBalance;
   if (balance) {
     items.push(balance.irrigationRefMm > 0
-      ? `灌溉决策：近 10 日建议灌溉 ${number(balance.irrigationRefMm, 1)} mm（约 ${number(balance.irrigationRefM3PerMu, 1)} m³/亩）`
-      : "灌溉决策：近 10 日有效降雨覆盖番茄中期参考需水量，结合田间情况安排灌排");
+      ? `灌溉决策：${balance.name}（${balance.stage}）近 10 日参考灌溉 ${number(balance.irrigationRefMm, 1)} mm（约 ${number(balance.irrigationRefM3PerMu, 1)} m³/亩）`
+      : `灌溉决策：近 10 日有效降雨覆盖${balance.name}参考需水量，结合田间情况安排灌排`);
   }
   const latest = profile?.days?.at(-1);
   if (latest && profile?.layers) {
@@ -542,14 +543,14 @@ function SoilDetails({ profile, satellite, onReplay }) {
     <p>{soilReference.site} · {soilReference.dates} · 相对含水量</p>
     <Metadata rows={soilReference.layers.map(([depth, amount]) => [depth, `${amount}%`])} />
     <Source label="中山市农业农村局墒情记录" href={soilReference.url} />
-    <button type="button" className="primary-button detail-action" onClick={onReplay}><PlayCircle size={20} /> 查看灌溉与墒情实测曲线 <ArrowUpRight size={16} /></button>
+    <button type="button" className="text-button detail-action" onClick={onReplay} title="意大利帕尔马番茄灌溉试验公开数据集，仅作方法参考">外部参考：番茄田灌溉与墒情实测曲线 <ArrowSquareOut size={15} /></button>
   </>;
 }
 
-function AgroDetails({ agro, weather, onReplay, onWater }) {
+function AgroDetails({ agro, weather, onReplay, onWater, onCrops }) {
   const balance = agro?.waterBalance;
+  const balances = agro?.balances ?? [];
   const comparison = agro?.comparison;
-  const irrigate = balance != null && balance.irrigationRefMm > 0;
   const deltaText = (pct, unit) => pct == null ? "—" : `${pct > 0 ? "+" : ""}${pct}%${unit ?? ""}`;
   return <>
     <AgroChart daily={agro?.daily} lastYear={agro?.lastYearDaily} featured />
@@ -576,14 +577,13 @@ function AgroDetails({ agro, weather, onReplay, onWater }) {
       <MonthlyChart monthly={agro.monthly} />
       <p className="muted">当月为进行中的统计（天数不齐），NASA POWER LST 日值汇总。</p>
     </> : null}
-    <h3 className="detail-heading">近 {balance?.days ?? 10} 日水分平衡{balance?.from && `（${spanLabel(balance)}）`}</h3>
-    <Metadata rows={[
-      ["降雨量", `${number(balance?.precip, 1)} mm`],
-      ["有效降雨", `${number(balance?.effectiveRain, 1)} mm`],
-      ["作物需水 ETc（番茄中期 Kc 1.15）", `${number(balance?.etcMid, 1)} mm`],
-      ["作物水分盈亏（有效降雨 − ETc）", balance ? `${number(balance.effectiveRain - balance.etcMid, 1)} mm` : "—"],
-      ["灌溉参考量", !balance ? "暂无" : irrigate ? `${number(balance.irrigationRefMm, 1)} mm ≈ ${number(balance.irrigationRefM3PerMu, 1)} m³/亩` : "0 mm（区域参考）"],
-    ]} />
+    <h3 className="detail-heading">在田作物水分平衡{balance?.from && `（近 ${balance.days} 日，${spanLabel(balance)}）`}</h3>
+    {balances.length ? <ReadingTable head={["作物", "生育期", "Kc", "降雨 (mm)", "有效降雨 (mm)", "需水 ETc (mm)", "灌溉参考 (mm)"]}
+      rows={balances.map((item) => [
+        item.name, item.stage, number(item.kc, 2), number(item.precip, 1), number(item.effectiveRain, 1), number(item.etc, 1),
+        item.irrigable ? number(item.irrigationRefMm, 1) : "不纳入",
+      ])} /> : <p className="detail-empty">暂无可用的水分平衡数据。</p>}
+    <p className="muted">区域灌溉参考取本月在田作物中需水最旺、可灌溉的一茬，当前为{balance ? `${balance.name}（${balance.stage}，Kc ${number(balance.kc, 2)}）` : "无"}。</p>
     <p className="muted">{agro?.method?.irrigation}</p>
     <IrrigationPlanner agro={agro} weather={weather} />
     {agro?.risks?.length ? <>
@@ -596,23 +596,29 @@ function AgroDetails({ agro, weather, onReplay, onWater }) {
       </div>)}</div>
     </> : <p className="detail-empty">{agro?.risks ? `近 ${agro.window.days} 日未触发国标农气事件阈值。` : "暂无可用的农气事件扫描记录。"}</p>}
     <Source label="FAO-56 灌溉与排水论文（方法原文）" href="https://www.fao.org/4/x0490e/x0490e00.htm" />
-    <button type="button" className="text-button" onClick={onWater}>查看区域水环境 <CaretRight size={15} /></button>
-    <button type="button" className="primary-button detail-action" onClick={onReplay}><PlayCircle size={20} /> 番茄田灌溉实测回放 <ArrowUpRight size={16} /></button>
+    <div className="detail-links">
+      <button type="button" className="text-button" onClick={onCrops}>作物农事决策 <CaretRight size={15} /></button>
+      <button type="button" className="text-button" onClick={onWater}>区域水环境 <CaretRight size={15} /></button>
+      <button type="button" className="text-button" onClick={onReplay} title="意大利帕尔马番茄灌溉试验公开数据集，仅作方法参考">外部参考：番茄田灌溉试验回放 <ArrowSquareOut size={15} /></button>
+    </div>
   </>;
 }
 
 // 作物农事决策详情：生育期农事、喷药作业窗口、病虫气象适宜度、冬种积温。
-function CropsDetails({ crops, onLamp }) {
+function CropsDetails({ crops, onLamp, onAgro }) {
   const { stages = [], sprayWindows = [], pests = [], pestWindow, gdd, method } = crops ?? {};
   const month = new Intl.DateTimeFormat("zh-CN", { timeZone: shanghai, month: "long" }).format(new Date());
   return <>
     <span className="subtle-tag">作物农事决策 · 派生数据</span>
     <p className="case-intro">由 Open-Meteo 未来 48 小时逐时预报与 NASA POWER 农业气象日值实时派生，覆盖斗门主栽作物的生育期农事、喷药作业窗口与病虫气象适宜度，辅助田间作业安排。</p>
     <h3 className="detail-heading">当季作物与农事要点（{month}）</h3>
-    {stages.length ? <ReadingTable head={["作物", "当前生育期", "农事要点"]}
-      rows={stages.map(({ name, stage, focus }) => [name, stage, focus])} />
+    {stages.length ? <ReadingTable head={["作物", "生育期", "作物系数 Kc", "农事要点"]}
+      rows={stages.map(({ id, name, stage, kc, focus }) => [
+        <strong key={id}>{name}</strong>, stage, kc == null ? "—" : number(kc, 2), focus,
+      ])} />
       : <p className="detail-empty">作物决策数据获取中。</p>}
-    <p className="muted">生育期划分依据珠海市农业农村局种粮扶持通知（早造插秧 3/1–4/20、晚造 7/10–8/20）与广东省农业科学院公开农事月历。</p>
+    <p className="muted">{method?.calendar}。表中作物系数用于换算各作物近 10 日需水与灌溉参考量，
+      <button type="button" className="inline-link" onClick={onAgro}>查看在田作物水分平衡</button>。</p>
     <h3 className="detail-heading">喷药作业窗口 · 未来 48 小时</h3>
     {sprayWindows.length ? <ReadingTable head={["时段", "时长", "气温范围", "最大风速 (km/h)"]}
       rows={sprayWindows.map(({ start, end, hours, tempRange, windPeak }) => [
@@ -1155,13 +1161,13 @@ function DailyReport({ observations, profile, agro, alerts, risk, printing = fal
       <section className="report-section">
         <h3>三、蒸散与灌溉决策</h3>
         <ReportTable head={["项目", "数值"]} rows={[
-          ["参考蒸散 ET0（最新）", `${number(agro?.et0?.latest, 2)} mm/d（${agro?.et0?.latestDate ?? "—"}）`],
+          [`参考蒸散 ET0（截至 ${agro?.et0?.latestDate ?? "—"}）`, `${number(agro?.et0?.latest, 2)} mm/d`],
           ["近 30 日 ET0 均值", `${number(agro?.et0?.mean30, 2)} mm/d`],
-          ["近 10 日降雨 / 有效降雨", `${number(balance?.precip, 1)} mm / ${number(balance?.effectiveRain, 1)} mm`],
-          ["近 10 日作物需水 ETc（番茄中期）", `${number(balance?.etcMid, 1)} mm`],
-          ["灌溉参考", !balance ? "暂无水分平衡数据" : irrigate ? `建议灌溉 ${number(balance.irrigationRefMm, 1)} mm ≈ ${number(balance.irrigationRefM3PerMu, 1)} m³/亩` : "水分盈余，暂无需灌溉"],
+          [`近 10 日降雨 / 有效降雨（${spanLabel(balance)}）`, `${number(balance?.precip, 1)} mm / ${number(balance?.effectiveRain, 1)} mm`],
+          [`近 10 日作物需水 ETc（${balance?.name ?? "—"} · ${balance?.stage ?? ""}，Kc ${number(balance?.kc, 2)}）`, `${number(balance?.etc, 1)} mm`],
+          ["灌溉参考", !balance ? "本月无区域灌溉参考作物" : irrigate ? `建议灌溉 ${number(balance.irrigationRefMm, 1)} mm ≈ ${number(balance.irrigationRefM3PerMu, 1)} m³/亩` : "水分盈余，暂无需灌溉"],
         ]} />
-        <p className="report-note">输入为 NASA POWER 农业气象日值，ET0 按 FAO-56 Penman-Monteith 计算，有效降雨按 0.8 计。</p>
+        <p className="report-note">输入为 NASA POWER 农业气象日值，ET0 按 FAO-56 Penman-Monteith 计算，有效降雨按 0.8 计；作物系数按农事日历取当月在田作物。</p>
       </section>
 
       <section className="report-section">
@@ -1180,9 +1186,9 @@ function DailyReport({ observations, profile, agro, alerts, risk, printing = fal
         <h3>五、农事建议</h3>
         <ol className="report-advice">
           <li><strong>农时</strong>：{term.name} · {term.advice}（距{term.nextName} {term.daysToNext} 天）。</li>
-          <li><strong>水分管理</strong>：{!balance ? "按田间巡查记录安排灌排。" : irrigate
-            ? `区域水分平衡给出 ${number(balance.irrigationRefMm, 1)} mm 补水参考量，结合田间含水情况安排。`
-            : "有效降雨已覆盖番茄中期参考需水量，巡查排水和积水点。"}</li>
+          <li><strong>水分管理</strong>：{!balance ? "本月无区域灌溉参考作物，按田间巡查记录安排灌排。" : irrigate
+            ? `${balance.name}（${balance.stage}）水分平衡给出 ${number(balance.irrigationRefMm, 1)} mm 补水参考量，结合田间含水情况安排。`
+            : `有效降雨已覆盖${balance.name}（${balance.stage}）参考需水量，巡查排水和积水点。`}</li>
           <li><strong>巡查重点</strong>：{risk.high ? "关注低洼地块积水与排水沟渠畅通。" : "常规巡查田埂、沟渠与设施固定件。"}</li>
         </ol>
       </section>
@@ -1247,16 +1253,18 @@ function DataLinksDetails({ sources }) {
 }
 
 // ============ 灌溉决策计算器 ============
-// 输入全部来自平台真实数据：灌溉参考量（近 10 日 FAO-56 水分平衡）、日均作物需水 ETc；
-// 面积与泵额定流量由用户按本地实际调整，输出为工程换算结果。
+// 输入全部来自平台数据：某作物近 10 日 FAO-56 水分平衡得出的灌溉参考量与日均需水；
+// 参考作物可切换（当季在田作物 + 拟试点地块场景），面积与泵额定流量由用户按本地实际调整。
 function IrrigationPlanner({ agro, weather }) {
-  const balance = agro?.waterBalance;
+  const options = (agro?.balances ?? []).filter(({ irrigable }) => irrigable);
+  const [choice, setChoice] = useState("");
   const [area, setArea] = useState(50);
   const [flow, setFlow] = useState(20);
   const pumps = 2;
+  const balance = options.find(({ id }) => id === (choice || agro?.waterBalance?.id)) ?? null;
   if (!balance) return null;
   const refMm = Math.max(0, balance.irrigationRefMm ?? 0);
-  const etcDaily = balance.days > 0 ? (balance.etcMid ?? 0) / balance.days : 0;
+  const etcDaily = balance.days > 0 ? (balance.etc ?? 0) / balance.days : 0;
   const totalM3 = refMm * area * 0.667;
   const hours = flow > 0 ? totalM3 / (flow * pumps) : NaN;
   const coverDays = etcDaily > 0 && refMm > 0 ? refMm / etcDaily : NaN;
@@ -1270,9 +1278,14 @@ function IrrigationPlanner({ agro, weather }) {
   </div>;
   return <>
     <h3 className="detail-heading">灌溉作业换算器</h3>
-    <p className="muted">按当前水分平衡得出的灌溉参考量 {number(refMm, 1)} mm（日均作物需水 {number(etcDaily, 2)} mm/d），
-      结合本地地块面积与水泵额定流量换算作业方案。1 mm ≈ 0.667 m³/亩。</p>
+    <p className="muted">按所选作物近 {balance.days} 日水分平衡得出的灌溉参考量换算作业方案。1 mm ≈ 0.667 m³/亩。</p>
     <div className="planner">
+      <label className="detail-select">参考作物
+        <select value={balance.id} onChange={(event) => setChoice(event.target.value)}>
+          {options.map(({ id, name, stage }) => <option key={id} value={id}>{name} · {stage}</option>)}
+        </select>
+      </label>
+      <p className="planner-note">{balance.name}（{balance.stage}，Kc {number(balance.kc, 2)}）：灌溉参考量 {number(refMm, 1)} mm，日均需水 {number(etcDaily, 2)} mm/d。</p>
       {slider("地块面积", area, 5, 500, 5, "亩", setArea, "按实际种植范围调整")}
       {slider("单泵额定流量", flow, 5, 80, 5, "m³/h", setFlow, `${pumps} 泵并行 · 合计 ${flow * pumps} m³/h`)}
       <div className="planner-results">
@@ -1282,9 +1295,11 @@ function IrrigationPlanner({ agro, weather }) {
         <div><span>该水量可覆盖</span><strong>{Number.isFinite(coverDays) ? number(coverDays, 1) : "—"} <small>天</small></strong></div>
       </div>
       <p className={`planner-note ${rainySoon ? "planner-note-rain" : ""}`}>
-        {rainySoon
-          ? <>未来 24 小时预报累计降雨 {number(rain24, 1)} mm，建议雨后复核墒情再执行，可折减本次灌水量。</>
-          : <>未来 24 小时无有效降雨预报（累计 {number(rain24, 1)} mm），可按上表安排作业；灌溉后 24 小时复测墒情验证。</>}
+        {refMm <= 0
+          ? <>近 10 日有效降雨已覆盖{balance.name}参考需水量，本次无灌溉作业；出现连续无雨日后重新换算。{rainySoon ? ` 未来 24 小时预报累计降雨 ${number(rain24, 1)} mm，继续做好排水。` : ""}</>
+          : rainySoon
+            ? <>未来 24 小时预报累计降雨 {number(rain24, 1)} mm，建议雨后复核墒情再执行，可折减本次灌水量。</>
+            : <>未来 24 小时无有效降雨预报（累计 {number(rain24, 1)} mm），可按上表安排作业；灌溉后 24 小时复测墒情验证。</>}
       </p>
     </div>
   </>;
@@ -1375,7 +1390,7 @@ function PlotDetails({ profile, ndvi, onSoil, onField, onReplay }) {
     <div className="plot-links">
       <button type="button" className="risk-chip" onClick={onSoil}><span>墒情监测详情</span><CaretRight size={13} /></button>
       <button type="button" className="risk-chip" onClick={() => onField("planning")}><span>空间布局专题图</span><CaretRight size={13} /></button>
-      <button type="button" className="risk-chip" onClick={onReplay}><span>灌溉实测回放</span><CaretRight size={13} /></button>
+      <button type="button" className="risk-chip" onClick={onReplay} title="意大利帕尔马番茄灌溉试验公开数据集，与本地块规划场景作物一致"><span>番茄田试验回放</span><CaretRight size={13} /></button>
     </div>
     <p className="muted">面积按勾绘边界换算，实际施工边界以现场测量为准；监测值为 ERA5-Land 0.1° 网格在斗门镇的参考结论。</p>
   </>;
@@ -1383,7 +1398,7 @@ function PlotDetails({ profile, ndvi, onSoil, onField, onReplay }) {
 
 // ============ 键盘快捷键 ============
 const SHORTCUTS = [
-  ["1", "回到农情总览"], ["2", "预警值守"], ["3", "灌溉回放"], ["4", "定位生产档案"],
+  ["1", "回到农情总览"], ["2", "预警值守"], ["3", "农事决策"], ["4", "定位生产档案"],
   ["R", "生成农情日报"], ["D", "数据链路自检"], ["F", "全屏 / 退出全屏"], ["?", "本帮助"], ["Esc", "关闭当前弹层"],
 ];
 function ShortcutsHelp() {
@@ -1468,7 +1483,7 @@ export function App() {
   const agro = useReading("/api/agro", 3_600_000, "/data/agro-snapshot.json");
   const satelliteSoil = useReading("/data/doumen-satellite-soil.json", 3_600_000);
   const ndvi = useReading("/data/ndvi-history.json", 3_600_000);
-  const crops = useReading("/api/crops", 900_000);
+  const crops = useReading("/api/crops", 900_000, "/data/crops-snapshot.json");
   const alerts = useActiveAlerts(useReading("/api/alerts", 300_000));
   const [views, setViews] = useState([]);
   const [fullscreen, setFullscreen] = useState(false);
@@ -1492,7 +1507,7 @@ export function App() {
   const activePage = views[0]?.type;
   const riskPages = ["risk", "storm", "alert", "archive", "rainfall", "actions"];
   const titles = { weather: "斗门天气实况", forecast: "斗门天气预报", soil: "土壤墒情监测",
-    ndvi: "苗情长势（NDVI）", agro: "蒸散与灌溉决策", risk: "预警值守与农事处置", storm: "台风「桦加沙」", field: "斗门田间影像档案", replay: "番茄田实测回放",
+    ndvi: "苗情长势（NDVI）", agro: "蒸散与灌溉决策", risk: "预警值守与农事处置", storm: "台风「桦加沙」", field: "斗门田间影像档案", replay: "番茄田灌溉试验回放（外部参考）",
     map: "卫星底图与调研点位", archive: "斗门官方预警档案", alert: view?.archived ? "历史预警详情" : "在效预警详情",
     plot: PILOT_FIELD.name, links: "数据链路自检", help: "键盘快捷键", pest: "虫情测报灯", crops: "作物农事决策",
     report: "农情日报", briefing: "农情简报", rainfall: "斗门镇暴雨实测记录",
@@ -1523,7 +1538,7 @@ export function App() {
       const key = event.key === "?" ? "?" : event.key.toLowerCase();
       if (key === "1") { setViews([]); window.scrollTo({ top: 0 }); }
       else if (key === "2") setViews([{ type: "risk" }]);
-      else if (key === "3") setViews([{ type: "replay" }]);
+      else if (key === "3") setViews([{ type: "crops" }]);
       else if (key === "4") scrollToProduction();
       else if (key === "r") setViews([{ type: "report" }]);
       else if (key === "d") setViews([{ type: "links" }]);
@@ -1548,7 +1563,7 @@ export function App() {
         <div><strong>斗门智慧农田</strong><small>珠海 · 斗门区</small></div>
       </div>
       <nav className="top-nav" aria-label="大屏导航">
-        <button type="button" className={!["replay", ...riskPages].includes(activePage) ? "active" : ""} onClick={() => {
+        <button type="button" className={!["crops", ...riskPages].includes(activePage) ? "active" : ""} onClick={() => {
           close();
           if (window.location.hash) window.history.replaceState(null, "", window.location.pathname + window.location.search);
           window.scrollTo({ top: 0 });
@@ -1556,7 +1571,7 @@ export function App() {
           <MapTrifold size={18} /> 农情总览
         </button>
         <button type="button" className={riskPages.includes(activePage) ? "active" : ""} onClick={() => open("risk")}><ShieldWarning size={18} /> 预警值守</button>
-        <button type="button" className={activePage === "replay" ? "active" : ""} onClick={() => open("replay")}><Drop size={18} /> 灌溉回放</button>
+        <button type="button" className={activePage === "crops" ? "active" : ""} onClick={() => open("crops")}><Plant size={18} /> 农事决策</button>
         <button type="button" onClick={scrollToProduction}><FileText size={18} /> 生产档案</button>
       </nav>
       <div className="header-tools"><ClockDisplay />
@@ -1614,7 +1629,7 @@ export function App() {
             </section>
             <aside className="board-column operations" aria-label="风险、现场和滴灌">
               <RiskPanel risk={risk} alerts={alerts} onRisk={() => open("risk")} onAction={() => open("actions")} onArchive={openArchive} onAlert={openAlert} />
-              <AgroPanel agro={agro} crops={crops} onOpen={() => open("agro")} onCrops={() => open("crops")} onReplay={() => open("replay")} />
+              <AgroPanel agro={agro} crops={crops} onOpen={() => open("agro")} onCrops={() => open("crops")} />
               <FieldPanel onOpen={() => openField("overhead")} />
             </aside>
           </div>
@@ -1644,7 +1659,7 @@ export function App() {
       {["weather", "forecast"].includes(view.type) && <WeatherDetails weather={view.type === "weather" ? observations : weather} variant={view.type} risk={risk} regional={weather} />}
       {view.type === "soil" && <SoilDetails profile={profile} satellite={satelliteSoil} onReplay={() => open("replay")} />}
       {view.type === "ndvi" && <NdviDetails ndvi={ndvi} />}
-      {view.type === "agro" && <AgroDetails agro={agro} weather={weather} onReplay={() => open("replay")} onWater={() => open("water")} />}
+      {view.type === "agro" && <AgroDetails agro={agro} weather={weather} onReplay={() => open("replay")} onWater={() => open("water")} onCrops={() => open("crops")} />}
       {view.type === "risk" && <RiskDetails risk={risk} alerts={alerts} agro={agro} profile={profile} onAlert={openAlert} onArchive={openArchive}
         onRainfall={() => open("rainfall")} />}
       {view.type === "actions" && <>
@@ -1671,7 +1686,7 @@ export function App() {
       {view.type === "plot" && <PlotDetails profile={profile} ndvi={ndvi} onSoil={() => open("soil")} onField={openField} onReplay={() => open("replay")} />}
       {view.type === "links" && <DataLinksDetails sources={dataLinks} />}
       {view.type === "water" && <WaterDetails />}
-      {view.type === "crops" && <CropsDetails crops={crops} onLamp={() => open("pest")} />}
+      {view.type === "crops" && <CropsDetails crops={crops} onLamp={() => open("pest")} onAgro={() => open("agro")} />}
       {view.type === "briefing" && <Briefing alerts={alerts} agro={agro} profile={profile} crops={crops} />}
       {view.type === "report" && <DailyReport observations={observations} profile={profile} agro={agro} alerts={alerts} risk={risk} />}
       {view.type === "help" && <ShortcutsHelp />}

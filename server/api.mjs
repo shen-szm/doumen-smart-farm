@@ -4,7 +4,7 @@ import { emptyHistory, emptyObservations, fetchCurrentObservation, fetchObservat
 import { emptyWeather, fetchRegionalWeather } from './weather.mjs';
 import { emptySoilProfile, fetchSoilProfile } from './soil.mjs';
 import { emptyAgro, fetchAgro } from './agro.mjs';
-import { deriveCrops, emptyCrops } from './crops.mjs';
+import { deriveCrops } from './crops.mjs';
 
 const MINUTE = 60 * 1000;
 
@@ -84,11 +84,18 @@ export function createApiMiddleware({ env = process.env, fetcher = fetch, now = 
       : readSnapshot('agro-snapshot.json', emptyAgro, (snapshot) => snapshot.daily?.length && snapshot.fetchedAt),
     now,
   );
-  // 作物决策由已缓存的逐时预报 + 农业气象日值派生，随两者新鲜度联动。
+  // 作物决策由已缓存的逐时预报 + 农业气象日值派生；两者都拿不到时让请求失败，前端回退到快照文件。
   const crops = cachedRequest(
-    async () => deriveCrops(await weather(), await agro(), now),
+    async () => {
+      const result = deriveCrops(await weather(), await agro(), now);
+      if (!result.stages.length) throw new Error('Crop decisions need weather and agro data');
+      return result;
+    },
     15 * MINUTE,
-    (previous) => previous?.stages?.length ? { ...previous, status: 'cached' } : emptyCrops,
+    (previous) => {
+      if (previous?.stages?.length) return { ...previous, status: 'cached' };
+      throw new Error('Crop decisions unavailable');
+    },
     now,
   );
   const routes = new Map([

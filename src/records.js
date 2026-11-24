@@ -97,23 +97,8 @@ export const soilReference = {
   layers: [["0–20 cm", 40.89], ["20–40 cm", 101.39], ["40–60 cm", 102.70]],
 };
 
-// 斗门（珠三角双季稻区）主要作物农事日历，月份为公历。
-// 依据广东水稻、荔枝栽培技术规程与斗门镇调研整理。
-export const cropCalendar = {
-  note: "依据广东省水稻、荔枝栽培技术规程与斗门镇调研整理，月份为公历",
-  crops: [
-    { name: "早稻", key: "rice-early", months: ["育秧", "育秧", "移栽", "分蘖", "拔节", "抽穗灌浆", "收获", null, null, null, null, null] },
-    { name: "晚稻", key: "rice-late", months: [null, null, null, null, null, null, "育秧移栽", "分蘖", "拔节抽穗", "灌浆", "收获", null] },
-    { name: "荔枝", key: "lychee", months: ["控梢促花", "花芽分化", "开花", "幼果发育", "果实发育", "采收", "采后修剪", "培养秋梢", "培养秋梢", "冬梢控制", "冬梢控制", "冬梢控制"] },
-    { name: "冬种蔬菜", key: "veg", months: ["田间管护", "采收", "采收", "收获收尾", null, null, null, null, "备耕整地", "育苗", "定植", "田间管护"] },
-  ],
-};
-
-export const cropStageTones = {
-  育: "#4da3ff", 移: "#5ec7e0", 分: "#58c98a", 拔: "#58c98a", 抽: "#e8c95c", 灌: "#e8c95c",
-  幼: "#e8c95c", 果: "#e8c95c", 花: "#e2b369", 收: "#f0954a", 采: "#f0954a", 修: "#a08ac2",
-  梢: "#7aa668", 控: "#8b9aa8", 备: "#8b9aa8", 育苗: "#4da3ff", 定: "#5ec7e0", 管: "#7aa668", 整: "#8b9aa8",
-};
+// 农事日历与生育期配色统一放在 cropCalendar.js，供日历表、作物决策与灌溉参考作物共用。
+export { cropCalendar, cropStageTones } from "./cropCalendar.js";
 
 export const villageHighlights = {
   dahao: [

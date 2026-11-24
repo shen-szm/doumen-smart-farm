@@ -146,6 +146,15 @@ button.cross-row:hover span strong { color: var(--mint); }
 .link-live { color: #7ad3d0; }
 .link-stale { color: var(--subtle); }
 
+/* 详情页底部的次级入口（文字按钮横排） */
+.detail-links { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 10px; }
+.inline-link {
+  display: inline; padding: 0; border: 0; background: none; color: var(--mint); font: inherit;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.inline-link:hover { color: #a2e7e3; }
+.planner > .detail-select { justify-content: flex-start; }
+.planner > .detail-select select { min-width: 220px; }
 /* 灌溉作业换算器 */
 .planner { display: grid; gap: 10px; border: 1px dashed var(--line); border-radius: 8px; padding: 12px 14px; }
 .planner-slider { display: grid; gap: 5px; }
@@ -485,6 +494,7 @@ button.level-badge:hover { filter: brightness(1.19); }
 .agro-balance > div { border-top: 1px solid var(--line); padding-top: 5px; display: grid; gap: 3px; min-width: 0; }
 .agro-balance span { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; word-break: keep-all; }
 .agro-balance span em { font-style: normal; color: var(--subtle); }
+.agro-balance .agro-crop { color: var(--subtle); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .agro-balance strong { font-family: var(--number); font-size: 19px; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .agro-balance strong small { font-size: 11px; color: var(--muted); font-weight: 500; }
 .agro-advice {

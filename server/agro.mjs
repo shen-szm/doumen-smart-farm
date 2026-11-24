@@ -1,4 +1,5 @@
 import { DOUMEN } from './weather.mjs';
+import { PILOT_CROP, cropStagesFor, monthIndexOf } from '../src/cropCalendar.js';
 
 const SOURCE = Object.freeze({
   name: 'NASA POWER · 农业气象',
@@ -8,9 +9,9 @@ const SOURCE = Object.freeze({
 const METHOD_NOTE = Object.freeze({
   et0: 'FAO-56 Penman-Monteith 公式（式 6、11–13、21、39–47），日步长，土壤热通量 G=0，地表反照率 0.23',
   radiation: '太阳辐射缺测日（POWER 辐射字段比温压湿风晚发布数日）采用 Open-Meteo 逐日短波辐射代入同一公式；与 POWER 实测辐射逐日对比，平均绝对误差约 7%',
-  kc: 'FAO-56 表 12 番茄作物系数：初期 0.60 / 中期 1.15 / 末期 0.80',
+  kc: '作物系数取 FAO-56 表 12：水稻 初期 1.05 / 中期 1.20 / 末期 0.75，叶菜类 初期 0.70 / 中期 1.00 / 末期 0.95；按农事日历取本月在田作物及生育期，分蘖期取初期与中期之间',
   effectiveRain: '有效降雨按降雨量 × 0.8 计（FAO-56 第 7 章湿润地区参考比例）',
-  irrigation: '灌溉参考量 = 近 10 日 ΣETc(中期) − 近 10 日 Σ有效降雨，取正值；1 mm ≈ 0.667 m³/亩',
+  irrigation: '灌溉参考量 = 近 10 日 Σ(ET0 × 当期作物系数) − 近 10 日 Σ有效降雨，取正值；1 mm ≈ 0.667 m³/亩。收获期、秧苗期与荔枝果园不纳入区域灌溉参考；稻田按参考作物法简化计算，未计渗漏与田面水层',
 });
 const PARAMETERS = ['PRECTOTCORR', 'T2M', 'T2M_MAX', 'T2M_MIN', 'RH2M', 'WS2M', 'ALLSKY_SFC_SW_DWN', 'PS'];
 const WINDOW_DAYS = 90;
@@ -20,7 +21,6 @@ const ELEVATION = 5; // 斗门镇沿海平原（m）
 const ALBEDO = 0.23;
 const SOLAR_CONSTANT = 0.0820; // MJ m-2 min-1
 const SIGMA = 4.903e-9; // MJ K-4 m-2 day-1
-const KC = Object.freeze({ crop: '番茄（FAO-56 表 12）', initial: 0.60, mid: 1.15, late: 0.80 });
 const EFFECTIVE_RAIN_RATIO = 0.8;
 
 // QX/T 208-2013《水稻高温热害等级》：日最高气温≥35℃且日均温≥30℃持续≥3天。
@@ -265,18 +265,15 @@ export function normalizeAgro(payload, fetchedAt, radiation = null) {
     };
   })() : null;
 
-  const recent = et0Days.slice(-BALANCE_DAYS);
-  const sum = (key) => recent.reduce((total, day) => total + day[key], 0);
-  const precip10 = sum('precip');
-  const effectiveRain10 = precip10 * EFFECTIVE_RAIN_RATIO;
-  const etcMid10 = sum('et0') * KC.mid;
-  const irrigationRefMm = Math.max(0, etcMid10 - effectiveRain10);
-
   const risks = [...heatStressRuns(daily), ...rainstormDays(daily), ...autumnChillRuns(daily)]
     .sort((a, b) => b.window.localeCompare(a.window));
   const latest = et0Days.at(-1);
-  // 所有「近 N 日」指标的真实起止日期：数据源有发布滞后，界面必须按实际区间标注。
-  const span = (days) => ({ from: days[0]?.date ?? null, to: days.at(-1)?.date ?? null, days: days.length });
+  const recent = et0Days.slice(-BALANCE_DAYS);
+
+  // 本月在田作物（农事日历）各算一份近 N 日水分平衡；区域参考作物取其中需水最旺、可灌溉的一茬。
+  const { crops: seasonCrops, reference } = seasonalCrops(fetchedAt);
+  const balances = seasonCrops.filter((crop) => crop.kc != null).map((crop) => cropWaterBalance(recent, crop));
+  const waterBalance = balances.find(({ id }) => id === reference?.id) ?? null;
 
   return {
     status: 'current',
@@ -286,7 +283,7 @@ export function normalizeAgro(payload, fetchedAt, radiation = null) {
     fetchedAt: fetchedAt.toISOString(),
     window: { days: WINDOW_DAYS, timeStandard: 'LST（当地太阳日，与北京时间差约 27 分钟）' },
     dataThrough: latest?.date ?? null,
-    kc: KC,
+    referenceCrop: reference ? { id: reference.id, name: reference.name, stage: reference.stage, kc: reference.kc } : null,
     daily,
     et0: {
       latest: latest.et0,
@@ -294,21 +291,48 @@ export function normalizeAgro(payload, fetchedAt, radiation = null) {
       mean30: Number((et0Days.slice(-30).reduce((total, day) => total + day.et0, 0) / 30).toFixed(2)),
       radiationFilledDays: daily.filter((day) => day.radiationFilled).length,
     },
-    waterBalance: {
-      ...span(recent),
-      precip: Number(precip10.toFixed(1)),
-      effectiveRain: Number(effectiveRain10.toFixed(1)),
-      etcMid: Number(etcMid10.toFixed(1)),
-      irrigationRefMm: Number(irrigationRefMm.toFixed(1)),
-      irrigationRefM3PerMu: Number((irrigationRefMm * 0.667).toFixed(1)),
-      surplus: Number((precip10 - sum('et0')).toFixed(1)),
-    },
+    waterBalance,
+    balances,
     lastYearDaily,
     monthly,
     comparison: comparison ? { ...comparison, ...span(et0Days.slice(-30)) } : null,
     risks,
     method: METHOD_NOTE,
   };
+}
+
+// 所有「近 N 日」指标的真实起止日期：数据源有发布滞后，界面必须按实际区间标注。
+const span = (days) => ({ from: days[0]?.date ?? null, to: days.at(-1)?.date ?? null, days: days.length });
+
+// 某作物近 N 日的水分平衡：ETc = ΣET0 × 该作物当期作物系数。
+export function cropWaterBalance(days, crop) {
+  const total = (key) => days.reduce((sum, day) => sum + day[key], 0);
+  const precip = total('precip');
+  const effectiveRain = precip * EFFECTIVE_RAIN_RATIO;
+  const etc = total('et0') * crop.kc;
+  const irrigationRefMm = Math.max(0, etc - effectiveRain);
+  return {
+    id: crop.id,
+    name: crop.name,
+    stage: crop.stage,
+    kc: crop.kc,
+    irrigable: crop.irrigable,
+    pilot: Boolean(crop.pilot),
+    ...span(days),
+    precip: Number(precip.toFixed(1)),
+    effectiveRain: Number(effectiveRain.toFixed(1)),
+    etc: Number(etc.toFixed(1)),
+    irrigationRefMm: Number(irrigationRefMm.toFixed(1)),
+    irrigationRefM3PerMu: Number((irrigationRefMm * 0.667).toFixed(1)),
+    surplus: Number((precip - etc).toFixed(1)),
+  };
+}
+
+// 本月在田作物，外加拟试点地块场景；区域参考作物取其中需水最旺、可灌溉的一茬。
+export function seasonalCrops(date) {
+  const inField = cropStagesFor(monthIndexOf(date));
+  const reference = inField.filter(({ irrigable }) => irrigable).sort((a, b) => b.kc - a.kc)[0] ?? null;
+  return { crops: [...inField, PILOT_CROP], reference };
 }
 
 export async function fetchAgro(fetcher = fetch, now = () => Date.now()) {
