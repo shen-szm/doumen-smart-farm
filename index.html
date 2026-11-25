@@ -7,9 +7,45 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
     <title>斗门智慧农田 · 农情监测大屏</title>
+    <style>
+      /* 应用启动前的画面：网速慢时也能看到「正在加载」，而不是一片空屏。应用一挂载，这段内容就被替换掉。 */
+      html, body { margin: 0; min-height: 100%; background: #0b141c; color-scheme: dark; }
+      .boot { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 14px;
+        color: #aebfcd; font: 15px/1.6 "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif; }
+      .boot a { color: #7ad3d0; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot" role="status">
+        <svg viewBox="0 0 28 28" width="36" height="36" aria-hidden="true">
+          <rect x="14" y="2" width="12" height="12" fill="#7ad3d0" opacity=".28" />
+          <rect x="2" y="2" width="24" height="24" rx="3" fill="none" stroke="#7ad3d0" stroke-width="2.2" />
+          <path d="M14 2v24M2 14h24" fill="none" stroke="#7ad3d0" stroke-width="2.2" />
+        </svg>
+        <p>斗门智慧农田 · 正在加载</p>
+      </div>
+    </div>
+    <noscript>
+      <p style="margin: 24px; color: #aebfcd">这个大屏需要浏览器启用 JavaScript 才能显示。</p>
+    </noscript>
+    <script>
+      // 应用挂载之前的两件事：加载久了提示检查网络；程序文件没加载成功时给出刷新入口。
+      (function () {
+        var boot = document.querySelector(".boot");
+        var note = boot.querySelector("p");
+        var timer = setTimeout(function () {
+          note.textContent = "加载时间较长，请检查网络；一直没有内容就刷新页面。";
+        }, 8000);
+        window.addEventListener("error", function (event) {
+          var target = event.target;
+          if (target && (target.tagName === "SCRIPT" || target.tagName === "LINK") && document.body.contains(boot)) {
+            clearTimeout(timer);
+            boot.innerHTML = '<p>页面程序没有加载成功。<a href="">重新加载</a></p>';
+          }
+        }, true);
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
