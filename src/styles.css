@@ -367,6 +367,12 @@ button.cross-row:hover span strong { color: var(--mint); }
 .map-view { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .map-utility { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; padding-top: 8px; }
 .satellite-map-image { filter: saturate(.93) brightness(.98); }
+/* 高清实拍影像：略提亮，与卫星底图的观感衔接。滤镜加在整个图层而不是单块瓦片上，
+   否则瓦片各自取整，放大后会出现拼缝 */
+.leaflet-detail-pane { filter: brightness(1.14) saturate(.96); }
+/* Leaflet 默认给瓦片加「加法混合」来规避浏览器的老缺陷，但瓦片下面压着卫星底图时，
+   会在瓦片边界出现亮线。这一层下面有底图，改回普通混合。 */
+.leaflet-container .leaflet-detail-pane img.leaflet-tile { mix-blend-mode: normal; }
 .map-stage .leaflet-control-scale-line { background: #0c1a25e8; border-color: #b9d7e6; color: #f0f9fc; text-shadow: none; }
 .map-controls { top: 13px; right: 13px; display: grid; justify-items: end; gap: 5px; }
 .map-controls button { width: 37px; height: 36px; border-radius: 5px; display: grid; place-items: center; }

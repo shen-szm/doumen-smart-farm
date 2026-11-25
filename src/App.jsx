@@ -4,7 +4,7 @@ import {
   Cloud, CloudFog, CloudRain, CloudSun, Clock, Database, Drop, Gauge, Keyboard, Leaf, MapPin, MapTrifold, Monitor, PlayCircle, Sun, Thermometer,
   ChartBar, ChartLineDown, ChartLineUp, FileText, Images, MagnifyingGlassMinus, MagnifyingGlassPlus, Plant, Printer, Scan, ShieldCheck, ShieldWarning, VideoCamera, Wind, X,
 } from "@phosphor-icons/react";
-import { FieldMap, villages, PILOT_FIELD } from "./FieldMap.jsx";
+import { DETAIL_IMAGERY, FieldMap, villages, PILOT_FIELD } from "./FieldMap.jsx";
 import { AgroChart, ForecastChart, MonthlyChart, NdviChart, ObservationChart, PestChart, ReplayChart, RootZoneChart, SoilChart, SoilProfileChart, YieldChart } from "./charts.jsx";
 import {
   alertUrl, asset, formatTime, getJson, guidanceUrl, number, rainRisk, replayTime,
@@ -1765,11 +1765,14 @@ export function App() {
       {view.type === "pest" && <PestLampDetails crops={crops} />}
       {view.type === "map" && <>
         <Metadata rows={[
-          ["卫星影像", "Sentinel-2 · 2025 年自然色合成 · EOxCloudless"],
+          ["卫星底图", "Sentinel-2 · 2025 年自然色合成 · EOxCloudless · 约 20 米一像素"],
+          ["高清实拍影像", `放大到约 13.5 级后，在同一位置叠入 ${DETAIL_IMAGERY.name} 的真实影像，可继续放大到 16 级细看田块、道路与村舍（更近只会拉伸像素）。需联网；取不到时保持卫星底图`],
+          ["航拍近景", "大濠冲村 2026-07-13 无人机航拍。把大濠冲村点放到画面中间、放大到约 15 级时自动推进，也可点「农田近景」进入"],
           ["影像许可", <Source label="CC BY-NC-SA 4.0" href="https://cloudless.eox.at/license-non-commercial" />],
           ["调研底图", "2018 年斗门区地图局部 · 粤S（2018）022号 · 广东省国土资源厅监制"],
           ["图上点位", "大濠冲村、小濠冲村调研位置"],
         ]} />
+        <Source label={`${DETAIL_IMAGERY.name} · 公共影像服务`} href={DETAIL_IMAGERY.url} />
         <button type="button" className="text-button" onClick={() => open("image", { image: {
           file: asset("/media/doumen-survey-map.jpg"), title: "斗门区调研底图", alt: "斗门区纸质地图调研区域局部", context: "2018 年斗门区地图 · 粤S（2018）022号",
         } })}>查看调研底图原图 <CaretRight size={14} /></button>
