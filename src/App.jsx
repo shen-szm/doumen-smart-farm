@@ -18,6 +18,8 @@ const overhead = asset("/media/dahaoyong-overhead.webp");
 const cameraUrl = import.meta.env.VITE_CAMERA_HLS_URL;
 const wave = (source) => source?.status === "current" ? "自动更新" : source?.status === "cached" ? "缓存快照"
   : source ? "暂不可用" : "正在获取";
+// 「最近核对」：有的数据源并不是每天都有新数据（云量、发布周期），所以显示最近一次与来源核对的时间。
+const checkedText = (source) => `${formatTime(source?.checkedAt, "date")}${source?.status === "cached" ? "（之后未能连上来源，显示的是上次核对的结果）" : ""}`;
 
 function useCountUp(target, duration = 1100) {
   const [value, setValue] = useState(NaN);
@@ -559,11 +561,12 @@ function SoilDetails({ profile, satellite, onReplay }) {
     ]} />}
     <h3 className="detail-heading">卫星表层对照 · NOAA SMOPS</h3>
     <SoilChart series={satellite?.points} featured daily />
-    {satellite && <Metadata rows={[
+    {satellite?.points?.length > 0 && <Metadata rows={[
       ["数据产品", `${satellite.product} · ${satellite.resolution}`],
       ["观测口径", `${satellite.depth} · 体积含水量（%）`],
-      ["最新日值", `${satellite.points.at(-1).time.slice(0, 10)}（${satellite.timeZone}）`],
+      ["时序长度", `近 ${satellite.points.length} 天 · 最新 ${satellite.points.at(-1).time.slice(0, 10)}（${satellite.timeZone}）`],
       ["数据来源", <Source label={satellite.source.name} href={satellite.source.url} />],
+      ["最近核对", checkedText(satellite)],
     ]} />}
     <h3 className="detail-heading">珠三角剖面实测参考</h3>
     <p>{soilReference.site} · {soilReference.dates} · 相对含水量</p>
@@ -704,10 +707,21 @@ function AlertDetail({ alert, archived = false }) {
   </>;
 }
 
-function AlertArchive({ color, onAlert, onStorm }) {
+function AlertArchive({ color, history, onAlert, onStorm }) {
   const [selected, setSelected] = useState(color ?? "all");
   const items = officialArchive.filter((alert) => selected === "all" || alert.color === selected);
+  // 服务器自动记下的预警：来过又解除的也在里面，按等级筛选时一并筛。
+  const recorded = (history?.alerts ?? []).filter((alert) => selected === "all" || alert.color === selected);
   return <>
+    {recorded.length > 0 && <>
+      <h3 className="detail-heading">近期预警记录</h3>
+      <p className="muted">服务器每 5 分钟核对一次官方预警，生效过的自动记入，保留 90 天。</p>
+      <div className="archive-list">{recorded.map((alert) => <div key={alert.id}>
+        <AlertRow alert={alert} onClick={() => onAlert(alert, !alert.endsAt || Date.parse(alert.endsAt) <= Date.now())} />
+        <p>{formatTime(alert.startsAt)}{alert.endsAt ? ` 至 ${formatTime(alert.endsAt)}` : ""}</p>
+      </div>)}</div>
+    </>}
+    {recorded.length > 0 && <h3 className="detail-heading">典型预警档案</h3>}
     <p>珠海市及斗门区发布记录，按信号等级与影响区域查阅。</p>
     <div className="archive-filter" role="group" aria-label="按预警等级筛选">
       <button type="button" aria-pressed={selected === "all"} onClick={() => setSelected("all")}>全部</button>
@@ -1000,18 +1014,20 @@ function sensingTime(tile) {
 function NdviDetails({ ndvi }) {
   const scenes = ndvi?.scenes ?? [];
   const last = scenes.at(-1);
+  const skipped = (ndvi?.skipped ?? []).filter(({ date }) => !last || date > last.date);
   return <>
     <NdviChart scenes={scenes} featured />
     {last && <Metadata rows={[
       ["最新一期", `${last.date} · 云量 ${number(last.cloudCover)}% · 北京时间 ${sensingTime(last.tile)} 过境`],
       ["最新 NDVI", `大濠冲 ${number(last.ndvi?.dahao, 3)} · 小濠冲 ${number(last.ndvi?.xiaohao, 3)} · 片区 ${number(last.ndvi?.overall, 3)}`],
       ["时序长度", `${scenes.length} 景（${scenes[0].date} 至 ${last.date}，云量 < 30%）`],
+      ["此后未采用", skipped.length ? skipped.map(({ date, cloudCover }) => `${date.slice(5).replace("-", "/")} 云量 ${number(cloudCover)}%`).join(" · ") : "无"],
       ["观测窗口", "两村各 640 m × 640 m，片区 2.6 km × 2.6 km"],
       ["计算方法", ndvi.source.method],
       ["数据来源", <Source label={ndvi.source.name} href={ndvi.source.url} />],
-      ["快照生成", formatTime(ndvi.generatedAt, "date")],
+      ["最近核对", checkedText(ndvi)],
     ]} />}
-    <p className="muted">NDVI 反映植被绿度与长势：稻田在分蘖–灌浆期升高、收获前后回落。更新可执行 node scripts/refresh-ndvi.mjs 重新拉取。</p>
+    <p className="muted">NDVI 反映植被绿度与长势：稻田在分蘖–灌浆期升高、收获前后回落。服务器每 6 小时检索一次新影像，只采用云量低于 30% 的过境，取到后自动并入。</p>
   </>;
 }
 
@@ -1113,7 +1129,7 @@ function ProductionRecords({ onField, onRisk, onWater, operations }) {
 }
 
 function WaterDetails() {
-  const water = useReading("/data/doumen-water-quality.json", 3_600_000);
+  const water = useReading("/api/water-quality", 1_800_000, "/data/water-quality-snapshot.json");
   const [kind, setKind] = useState("grade");
   const [month, setMonth] = useState("");
   const reports = water?.reports?.filter((report) => report.kind === kind) ?? [];
@@ -1136,7 +1152,7 @@ function WaterDetails() {
         {reports.map((entry) => <option key={entry.month} value={entry.month}>{entry.month}</option>)}
       </select></label>}
     </div>
-    <p className="muted">{report ? `${report.month} · ${rows.length} 个公开断面 · ${report.publishedAt} 发布` : "暂无该类报告"}</p>
+    <p className="muted">{report ? `${report.month} · ${rows.length} 个公开断面 · ${report.publishedAt} 发布 · 最近核对 ${formatTime(water.checkedAt, "date")}` : "暂无该类报告"}</p>
     {rows.length > 0 && <ReadingTable head={index ? ["水体", "监测断面", "水质指数"] : ["水体", "监测断面", "类别", "目标", "达标情况", "主要污染指标"]} rows={rows} />}
     <p className="muted">公开记录按河道监测断面发布。灌溉取水水质以对应取水口检测为准。</p>
     {report && <details className="source-details"><summary>报告来源</summary><Source label={water.source.name} href={report.url} /></details>}
@@ -1553,10 +1569,11 @@ export function App() {
   const observations = useReading("/api/observations", 300_000, "/data/observations-snapshot.json");
   const profile = useReading("/api/soil-profile", 3_600_000, "/data/soil-profile-snapshot.json");
   const agro = useReading("/api/agro", 3_600_000, "/data/agro-snapshot.json");
-  const satelliteSoil = useReading("/data/doumen-satellite-soil.json", 3_600_000);
-  const ndvi = useReading("/data/ndvi-history.json", 3_600_000);
+  const satelliteSoil = useReading("/api/satellite-soil", 1_800_000, "/data/satellite-soil-snapshot.json");
+  const ndvi = useReading("/api/ndvi", 1_800_000, "/data/ndvi-snapshot.json");
   const crops = useReading("/api/crops", 900_000, "/data/crops-snapshot.json");
   const alerts = useActiveAlerts(useReading("/api/alerts", 300_000));
+  const alertHistory = useReading("/api/alert-history", 600_000, "/data/alert-history-snapshot.json");
   const [views, setViews] = useState([]);
   const [fullscreen, setFullscreen] = useState(false);
   const [screenError, setScreenError] = useState("");
@@ -1598,8 +1615,8 @@ export function App() {
     { key: "wx", label: "逐时与逐日天气", role: "Open-Meteo · 斗门参考点 22.21°N 113.30°E", status: weather?.status, time: weather?.fetchedAt, fetchedAt: weather?.fetchedAt, cycle: "15 分钟" },
     { key: "soil", label: "土壤剖面", role: "ECMWF ERA5-Land · 0.1° 网格", status: profile?.status, time: profile?.days?.at(-1)?.date ? `${profile.days.at(-1).date}T00:00:00+08:00` : null, fetchedAt: profile?.fetchedAt, cycle: "1 小时", note: "日值约 5 天滞后" },
     { key: "agro", label: "农业气象", role: "NASA POWER · FAO-56 Penman-Monteith", status: agro?.status, time: agro?.et0?.latestDate ? `${agro.et0.latestDate}T00:00:00+08:00` : null, fetchedAt: agro?.fetchedAt, cycle: "1 小时" },
-    { key: "sat", label: "卫星表层", role: "NOAA CPC SMOPS · 表层 1–5 cm", status: satelliteSoil?.points?.length ? "archive" : satelliteSoil?.status, time: satelliteSoil?.points?.at(-1)?.time },
-    { key: "ndvi", label: "植被指数", role: "Sentinel-2 · Microsoft Planetary Computer", status: ndvi?.scenes?.length ? "archive" : ndvi?.status, time: ndvi?.scenes?.at(-1)?.date },
+    { key: "sat", label: "卫星表层", role: "NOAA CPC SMOPS · 表层 1–5 cm", status: satelliteSoil?.status, time: satelliteSoil?.points?.at(-1)?.time, fetchedAt: satelliteSoil?.checkedAt, cycle: "6 小时", note: "来源滞后约 3 天" },
+    { key: "ndvi", label: "植被指数", role: "Sentinel-2 · Microsoft Planetary Computer", status: ndvi?.status, time: ndvi?.scenes?.at(-1)?.date, fetchedAt: ndvi?.checkedAt, cycle: "6 小时", note: "云量低于 30% 的过境才采用" },
     { key: "crops", label: "作物决策", role: "平台模型 · 逐时预报 + 农业气象派生", status: crops?.stages?.length ? crops.status : crops?.status, time: crops?.fetchedAt, fetchedAt: crops?.fetchedAt, cycle: "15 分钟" },
     { key: "alerts", label: "官方预警", role: "珠海市 / 斗门区 · 多渠道聚合", status: alerts?.status, time: alerts?.fetchedAt, fetchedAt: alerts?.fetchedAt, cycle: "5 分钟" },
   ];
@@ -1754,7 +1771,7 @@ export function App() {
         <ActionSteps />
         <details className="source-details"><summary>观测出处</summary><Source label="应急管理部门 · 广东极端强降雨记录" href={rainfallRecord.url} /></details>
       </>}
-      {view.type === "archive" && <AlertArchive color={view.color} onAlert={openAlert} onStorm={() => open("storm")} />}
+      {view.type === "archive" && <AlertArchive color={view.color} history={alertHistory} onAlert={openAlert} onStorm={() => open("storm")} />}
       {view.type === "alert" && <AlertDetail alert={view.alert} archived={view.archived} />}
       {view.type === "storm" && <StormDetails />}
       {view.type === "field" && <FieldDetails initial={view.photoId} onImage={(image) => setViews((previous) => [

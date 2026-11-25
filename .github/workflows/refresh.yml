@@ -30,7 +30,7 @@ jobs:
 
       - name: 增量刷新 NDVI（每周一调度与手动触发）
         if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 4 * * 1'
-        run: node scripts/refresh-ndvi.mjs || echo "::warning::ndvi refresh failed"
+        run: node scripts/refresh-cached.mjs ndvi || echo "::warning::ndvi refresh failed"
 
       - name: 构建（GitHub Pages 子路径）
         run: npx vite build --base=/doumen-smart-farm/

@@ -32,8 +32,9 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [react(), {
       name: "doumen-data",
-      configureServer(server) { server.middlewares.use(api); },
-      configurePreviewServer(server) { server.middlewares.use(api); },
+      // 数据接口挂到开发 / 预览服务上时才启动后台定时刷新；vite build 只加载配置，不取数。
+      configureServer(server) { server.middlewares.use(api); api.start(); },
+      configurePreviewServer(server) { server.middlewares.use(api); api.start(); },
     }],
   };
 });
