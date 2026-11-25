@@ -21,7 +21,7 @@ const PHOTO_START = { scale: 1.18, x: 0, y: 0 };
 export const DETAIL_IMAGERY = Object.freeze({
   name: "Esri World Imagery",
   url: "https://www.esri.com/en-us/arcgis/products/arcgis-online/services/basemaps",
-  credit: "Esri World Imagery",
+  credit: "Esri, Maxar, Earthstar Geographics, GIS User Community",
   tileUrl: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
 });
 
