@@ -85,7 +85,8 @@ if ! doumen_win "$DOUMEN_SERVER_DIR\\incoming\\apply-release.bat $NAME" | tr -d 
 EOF
   log "失败：同步或构建出错"; exit 1
 fi
-BUNDLE=$(doumen_win "dir /b $DOUMEN_SERVER_DIR\\dist\\client\\assets\\index-*.js" | tr -d '\r' | grep -E '^index-.*\.js$' | head -1)
+# 入口文件名取自 index.html 实际引用的那一个：切换时保留了上一版的资源，assets 里会有多个 index-*.js
+BUNDLE=$(doumen_win "type $DOUMEN_SERVER_DIR\\dist\\client\\index.html" | tr -d '\r' | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' | head -1 | sed 's#^assets/##')
 [ -n "$BUNDLE" ] || { echo "服务器上找不到构建产物，线上可能异常。回滚: bash deploy/rollback.sh $PREVIOUS" >&2; log "失败：找不到构建产物"; exit 1; }
 
 # ---- 4. 重启（server/*.mjs 与中间件在进程启动时加载）----
