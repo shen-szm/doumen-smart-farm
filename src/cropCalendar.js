@@ -67,10 +67,11 @@ const STAGE_NOTES = Object.freeze({
   "veg:10": "晚稻收获后接茬整地，高畦定植，基肥充足",
   "veg:11": "水肥一体化追肥，关注霜霉病与小菜蛾",
 });
+// 不在田时的农事要点：生育期一栏已写明「休田期 / 非种植期」，这里只写田块此时的用途。
 const OFF_SEASON_NOTES = Object.freeze({
-  "rice-early": "休田期：冬季轮作蔬菜或冬闲翻耕",
-  "rice-late": "休田期：田块种植早稻",
-  veg: "非种植期：田块种植水稻",
+  "rice-early": "冬季轮作蔬菜或冬闲翻耕",
+  "rice-late": "田块种植早稻",
+  veg: "田块种植水稻",
 });
 
 export const monthIndexOf = (date) =>
