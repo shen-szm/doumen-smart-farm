@@ -1200,6 +1200,26 @@ function CropCalendar() {
   </section>;
 }
 
+// 页面下方的「区域水环境」摘要：列出最新一期公开报告里各断面的水质，点「详情」看历次报告。
+function WaterSummary({ onWater }) {
+  const water = useReading("/api/water-quality", 1_800_000, "/data/water-quality-snapshot.json");
+  const sections = new Map((water?.sections ?? []).map((section) => [section.id, section]));
+  const report = water?.reports?.[0];
+  const index = report?.kind === "index";
+  return <section className="panel production-notes">
+    <PanelTitle title="区域水环境" action="详情" onClick={onWater} />
+    {!hasData(water) ? <p className="detail-empty">{pendingText(water, "水环境数据")}</p> : !report ? <p className="detail-empty">暂无公开报告</p> : <>
+      <p className="panel-status">{report.month} · {report.publishedAt} 发布 · {report.measurements.length} 个断面</p>
+      <ReadingTable head={index ? ["水体", "监测断面", "水质指数"] : ["水体", "监测断面", "类别", "目标", "达标情况"]}
+        rows={report.measurements.map(({ sectionId, grade, target, compliant, index: value }) => {
+          const section = sections.get(sectionId);
+          return [section?.river ?? "—", section?.name ?? "—",
+            ...(index ? [number(value, 4)] : [grade ?? "—", target ?? "—", compliant == null ? "—" : compliant ? "达标" : "未达标"])];
+        })} />
+    </>}
+  </section>;
+}
+
 function ProductionRecords({ onField, onRisk, onWater, operations }) {
   // 例行巡田每天都有，只在统计里计数，不逐条列出。
   const patrols = operations?.byType?.巡田 ?? 0;
@@ -1237,12 +1257,15 @@ function ProductionRecords({ onField, onRisk, onWater, operations }) {
         <YieldChart items={doumenStatistics.results.filter(({ label }) => label.includes("产量")).map(({ label, value }) => ({ label: label.replace("产量", ""), value: Number(value) }))} unit=" 万吨" />
         <Source label={doumenStatistics.source} href={doumenStatistics.url} />
       </section>
-      <section className="panel production-notes">
-        <PanelTitle title="农业管护资料" />
-        {localReferences.map(({ title, context, summary, source, url }) => <article key={title}>
-          <div><h3>{title}</h3><small>{context}</small></div><p>{summary}</p><Source label={source} href={url} />
-        </article>)}
-      </section>
+      <div className="production-stack">
+        <section className="panel production-notes">
+          <PanelTitle title="农业管护资料" />
+          {localReferences.map(({ title, context, summary, source, url }) => <article key={title}>
+            <div><h3>{title}</h3><small>{context}</small></div><p>{summary}</p><Source label={source} href={url} />
+          </article>)}
+        </section>
+        <WaterSummary onWater={onWater} />
+      </div>
       <section className="panel production-imagery">
         <PanelTitle title="重点影像" action="影像档案" onClick={() => onField("aerial")} />
         {fieldImages.filter(({ id }) => ["ground", "planning", "tenure", "xiaohao", "roads-aerial", "tower-pond"].includes(id)).map((image) => <button type="button" onClick={() => onField(image.id)} key={image.id}>
