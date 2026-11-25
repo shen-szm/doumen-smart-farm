@@ -25,6 +25,8 @@ npm run dev -- --port 4173
 - `GET /api/ndvi`：苗情 NDVI 时序来自 [Microsoft Planetary Computer](https://planetarycomputer.microsoft.com/) 的 Sentinel-2 L2A（免注册）。服务器每 6 小时检索影像目录，出现云量低于 30% 的新影像才下载计算，展示近 240 天的过境。
 - 默认底图使用 2025 年 Sentinel-2 自然色影像。 [EOxCloudless 许可与署名](https://cloudless.eox.at/license-non-commercial) 。`VITE_TIANDITU_TK` 可增加天地图图层。
 - `GET /api/satellite-soil`：卫星表层墒情来自 [NOAA CPC SMOPS 日值](https://ftp.cpc.ncep.noaa.gov/precip/PORT/SEMDP/SOIL-MOISTURE/SMOPS/DATA/)，覆盖两个村的 0.25° 网格。服务器每 6 小时核对，滚动保留最近 14 天；源文件是 NetCDF-4，用 h5wasm 解析。
+- 首屏右栏的「现场监控」循环、静音播放现场录像（`public/media/monitor/`，清单 `clips.json`）；原始录像放项目根目录的 `现场监控/`，执行 `node scripts/prepare-monitor.mjs` 转成网页版本。
+- 首屏下方的「农情分析」用接口数据出 12 张图表（温湿度、降水、风速气压、墒情、蒸散、辐射、月度统计、水分平衡、卫星墒情与苗情、虫情、农事作业构成），滚到附近才初始化。
 - `GET /api/water-quality`：区域水环境来自 [珠海市生态环境局斗门分局公开报告](https://www.doumen.gov.cn/zdlyxxgk/hjbhxxgk/szhj/index.html)。服务器每天核对栏目列表，新报告自动抓取并解析表格。
 - 随构建发布的快照 `public/data/*-snapshot.json` 只在服务器从未成功取数时兜底，静态部署直接读取；`node scripts/refresh-cached.mjs [ndvi] [satellite-soil] [water-quality]` 重建后三份。
 - `VITE_CAMERA_HLS_URL` 支持授权的 HLS 地址，例如 MediaMTX 输出。视频流由基地提供，摄像头详情支持播放失败后重试。
