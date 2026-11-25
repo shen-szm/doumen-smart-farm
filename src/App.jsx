@@ -22,6 +22,11 @@ const wave = (source) => source?.status === "current" ? "自动更新" : source?
   : source ? "暂不可用" : "正在获取";
 // 「最近核对」：有的数据源并不是每天都有新数据（云量、发布周期），所以显示最近一次与来源核对的时间。
 const checkedText = (source) => `${formatTime(source?.checkedAt, "date")}${source?.status === "cached" ? "（之后未能连上来源，显示的是上次核对的结果）" : ""}`;
+// 数据「还没到」和「取不到」要分清楚：没到说获取中，取不到说暂不可用，不能让人干等。
+const hasData = (source) => source != null && source.status !== "unavailable";
+const pendingText = (source, label = "") => source?.status === "unavailable" ? `${label}暂不可用` : `${label}获取中`;
+// 只把还没结束的喷药时段当作可以安排的时段：缓存或过期的预报里会剩下已经过去的时间。
+const upcomingSpray = (crops, now = Date.now()) => (crops?.sprayWindows ?? []).filter(({ end }) => Date.parse(end) > now);
 
 // 数值直接显示，不做滚动动效：运营屏上的读数要一眼看到准数。
 function CountNumber({ value, digits = 0, unit }) {
@@ -115,12 +120,13 @@ function WeatherPanel({ weather, regional, onOpen }) {
   const current = weather?.current;
   const grid = regional?.current;
   const astro = regional?.astro?.[0];
-  const condition = current?.text ?? weatherText(current?.code);
+  const condition = current ? (current.text ?? weatherText(current.code))
+    : weather?.status === "unavailable" ? "实况暂不可用" : "天气待更新";
   const Icon = condition === "晴" ? Sun : condition === "阴" ? Cloud : condition.includes("雨") ? CloudRain : condition.includes("雾") ? CloudFog : CloudSun;
   return <section className="panel weather-panel">
     <PanelTitle title="斗门站实况" action="逐时实况" onClick={onOpen} />
     <div className="weather-core">
-      <Icon className="weather-icon" size={34} weight="duotone" />
+      {current && <Icon className="weather-icon" size={34} weight="duotone" />}
       <div><strong>{number(current?.temp, 1)}<small>°C</small></strong>
         <p>{condition} {current?.windDirection && <span>· {current.windDirection}{current.windLevel ? ` ${current.windLevel}` : ""}</span>}</p></div>
     </div>
@@ -165,7 +171,8 @@ function ForecastPanel({ weather, risk, onOpen }) {
         </div>
       </div>
     </div>
-    <ForecastChart hours={weather?.hourly} />
+    <ForecastChart hours={weather?.hourly} empty={weather?.status === "unavailable" ? "天气预报暂不可用"
+      : weather == null ? "预报获取中" : "暂无逐小时降雨数据"} />
   </section>;
 }
 
@@ -185,7 +192,7 @@ function SoilPanel({ profile, onOpen }) {
         <strong className="layer-value">{number(latest.moisture[id], 1)}<small>%</small></strong>
         <GradeBadge grade={latest.grade[id]} />
       </div>)}
-    </div> : <p className="chart-empty">剖面数据获取中</p>}
+    </div> : <p className="chart-empty">{pendingText(profile, "剖面数据")}</p>}
     <RootZoneChart days={profile?.days} fieldCapacity={profile?.fieldCapacity?.value} />
     <div className="panel-footer"><span>根区体积含水量 · 7–28 cm</span><time>{latest?.date ?? "—"}</time></div>
   </section>;
@@ -313,7 +320,7 @@ function MonitorDetails({ clips }) {
 }
 
 // 分析区的一格：滚到附近才初始化图表，首屏加载不受影响。
-function AnalysisPanel({ title, meta, action = "详情", onClick, children }) {
+function AnalysisPanel({ title, meta, action = "详情", onClick, source, children }) {
   const host = useRef(null);
   const [shown, setShown] = useState(false);
   useEffect(() => {
@@ -329,8 +336,9 @@ function AnalysisPanel({ title, meta, action = "详情", onClick, children }) {
   }, []);
   return <section className="panel analysis-panel" ref={host}>
     <PanelTitle title={title} action={onClick ? action : undefined} onClick={onClick} />
-    {meta && <p className="panel-status">{meta}</p>}
-    {shown ? children : <div className="analysis-chart" />}
+    {meta && hasData(source) && <p className="panel-status">{meta}</p>}
+    {source?.status === "unavailable" ? <p className="chart-empty">这项数据暂不可用</p>
+      : hasData(source) ? (shown ? children : <div className="analysis-chart" />) : <div className="analysis-chart" />}
   </section>;
 }
 
@@ -342,29 +350,29 @@ function AnalysisSection({ observations, weather, profile, agro, crops, ndvi, sa
     <div className="section-head"><h2>农情分析</h2>
       <span>{agro?.dataThrough ? `农业气象日值截至 ${agro.dataThrough}` : ""}</span></div>
     <div className="analysis-grid">
-      <AnalysisPanel title="近 24 小时气温与湿度" meta="斗门站整点实况" onClick={() => onOpen("weather")}>
+      <AnalysisPanel title="近 24 小时气温与湿度" meta="斗门站整点实况" onClick={() => onOpen("weather")} source={observations}>
         <ObservationChart hours={observations?.history} {...chart()} /></AnalysisPanel>
-      <AnalysisPanel title="未来 7 日气温与降水" meta="逐日预报" onClick={() => onOpen("forecast")}>
+      <AnalysisPanel title="未来 7 日气温与降水" meta="逐日预报" onClick={() => onOpen("forecast")} source={weather}>
         <DailyForecastChart daily={weather?.daily} /></AnalysisPanel>
-      <AnalysisPanel title="近 24 小时风速与气压" meta="斗门站整点实况" onClick={() => onOpen("weather")}>
+      <AnalysisPanel title="近 24 小时风速与气压" meta="斗门站整点实况" onClick={() => onOpen("weather")} source={observations}>
         <WindPressureChart hours={observations?.history} /></AnalysisPanel>
-      <AnalysisPanel title="土壤墒情剖面" meta={`${span(profile?.days)} · 表层 / 根区 / 深层体积含水量`} onClick={() => onOpen("soil")}>
+      <AnalysisPanel title="土壤墒情剖面" meta={`${span(profile?.days)} · 表层 / 根区 / 深层体积含水量`} onClick={() => onOpen("soil")} source={profile}>
         <SoilProfileChart days={profile?.days} layers={profile?.layers} {...chart()} /></AnalysisPanel>
-      <AnalysisPanel title="降雨与参考蒸散" meta={`${span(agro?.daily)} · 虚线为去年同期`} onClick={() => onOpen("agro")}>
+      <AnalysisPanel title="降雨与参考蒸散" meta={`${span(agro?.daily)} · 虚线为去年同期`} onClick={() => onOpen("agro")} source={agro}>
         <AgroChart daily={agro?.daily} lastYear={agro?.lastYearDaily} {...chart()} /></AnalysisPanel>
-      <AnalysisPanel title="气温与太阳辐射" meta={`${span(agro?.daily)} · 农业气象日值`} onClick={() => onOpen("agro")}>
+      <AnalysisPanel title="气温与太阳辐射" meta={`${span(agro?.daily)} · 农业气象日值`} onClick={() => onOpen("agro")} source={agro}>
         <ClimateChart daily={agro?.daily} /></AnalysisPanel>
-      <AnalysisPanel title="月度气候统计" meta={`近 ${agro?.monthly?.length ?? 0} 个月 · 当月为进行中的统计`} onClick={() => onOpen("agro")}>
+      <AnalysisPanel title="月度气候统计" meta={`近 ${agro?.monthly?.length ?? 0} 个月 · 当月为进行中的统计`} onClick={() => onOpen("agro")} source={agro}>
         <MonthlyChart monthly={agro?.monthly} {...chart()} /></AnalysisPanel>
-      <AnalysisPanel title="在田作物水分平衡" meta="近 10 日 · 降雨 / 有效降雨 / 需水量 / 灌溉参考" onClick={() => onOpen("agro")}>
+      <AnalysisPanel title="在田作物水分平衡" meta="近 10 日 · 降雨 / 有效降雨 / 需水量 / 灌溉参考" onClick={() => onOpen("agro")} source={agro}>
         <WaterBalanceChart balances={agro?.balances} /></AnalysisPanel>
-      <AnalysisPanel title="卫星遥感表层墒情" meta={`${satelliteSoil?.points?.length ?? 0} 天 · 表层 1–5 cm`} onClick={() => onOpen("soil")}>
+      <AnalysisPanel title="卫星遥感表层墒情" meta={`${satelliteSoil?.points?.length ?? 0} 天 · 表层 1–5 cm`} onClick={() => onOpen("soil")} source={satelliteSoil}>
         <SoilChart series={satelliteSoil?.points} daily {...chart()} /></AnalysisPanel>
-      <AnalysisPanel title="卫星苗情植被指数" meta="只含云量低于 30% 的影像" onClick={() => onOpen("ndvi")}>
+      <AnalysisPanel title="卫星苗情植被指数" meta="只含云量低于 30% 的影像" onClick={() => onOpen("ndvi")} source={ndvi}>
         <NdviChart scenes={ndvi?.scenes} {...chart()} /></AnalysisPanel>
-      <AnalysisPanel title="虫情灯诱计数" meta="近 30 日 · 柱为各虫种，折线为合计" onClick={() => onOpen("pest")}>
+      <AnalysisPanel title="虫情灯诱计数" meta="近 30 日 · 柱为各虫种，折线为合计" onClick={() => onOpen("pest")} source={crops}>
         <PestChart series={crops?.lamp?.series} {...chart()} /></AnalysisPanel>
-      <AnalysisPanel title="本月农事作业构成" meta={`${crops?.operations?.month ?? ""} · 按作业类型计次`} action="台账" onClick={onLedger}>
+      <AnalysisPanel title="本月农事作业构成" meta={`${crops?.operations?.month ?? ""} · 按作业类型计次`} action="台账" onClick={onLedger} source={crops}>
         <OperationsChart byType={crops?.operations?.byType} /></AnalysisPanel>
     </div>
   </section>;
@@ -381,11 +389,14 @@ const monthDay = (date) => date?.slice(5).replace("-", "/") ?? "";
 const spanLabel = (span) => span?.from ? `${monthDay(span.from)}–${monthDay(span.to)}` : "";
 
 function AgroPanel({ agro, crops, onOpen, onCrops }) {
+  useNow(60_000); // 时段过去之后，「喷药」一栏要跟着变
+  const agroReady = hasData(agro);
+  const spray = upcomingSpray(crops)[0];
+  const pest = crops?.pests?.find(({ seasonal }) => seasonal);
+  const pestShort = pest ? `${pest.pest.replace(/（.*$/, "").replace(/病$/, "")} 适宜度${pest.level ?? "—"}` : pendingText(crops, "病虫适宜度");
   const balance = agro?.waterBalance;
   const irrigate = balance != null && balance.irrigationRefMm > 0;
-  const spray = crops?.sprayWindows?.[0];
-  const pest = crops?.pests?.find(({ seasonal }) => seasonal);
-  const pestShort = pest ? `${pest.pest.replace(/（.*$/, "").replace(/病$/, "")} 适宜度${pest.level ?? "—"}` : crops ? "模型运行中" : "获取中";
+  const noBalance = agroReady ? "本月无灌溉参考作物" : pendingText(agro);
   return <section className="panel agro-panel">
     <PanelTitle title="农事与灌溉" action="详细" onClick={onOpen} />
     <div className="agro-core">
@@ -397,13 +408,15 @@ function AgroPanel({ agro, crops, onOpen, onCrops }) {
       <div className="agro-balance">
         <div><span>近 10 日降雨{balance?.to && <em> 至 {monthDay(balance.to)}</em>}</span><strong>{number(balance?.precip, 1)} <small>mm</small></strong></div>
         <div><span>作物需水量</span><strong>{number(balance?.etc, 1)} <small>mm</small></strong>
-          <small className="agro-crop">{balance ? `${balance.name} · ${balance.stage}` : agro ? "本月无灌溉参考作物" : "获取中"}</small></div>
+          <small className="agro-crop">{balance ? `${balance.name} · ${balance.stage}` : noBalance}</small></div>
       </div>
     </div>
     <div className="risk-links agro-decision">
-      <button type="button" className={`risk-chip ${!spray ? "risk-chip-high" : ""}`} onClick={onCrops}
-        title={spray ? `未来 48 小时内昼间适宜喷药的时段，最大风速 ${number(spray.windPeak, 1)} km/h` : "未来 48 小时昼间暂无适宜喷药的时段"}>
-        <span>喷药 {spray ? `${clockLabel(spray.start)}–${spray.end.slice(11, 16)}` : "48 小时内暂无"}</span><CaretRight size={13} />
+      <button type="button" className={`risk-chip ${hasData(crops) && !spray ? "risk-chip-high" : ""}`} onClick={onCrops}
+        title={!hasData(crops) ? pendingText(crops) : spray ? `未来 48 小时内昼间适宜喷药的时段，最大风速 ${number(spray.windPeak, 1)} km/h`
+          : "未来 48 小时昼间暂无适宜喷药的时段"}>
+        <span>{!hasData(crops) ? pendingText(crops, "喷药时段")
+          : `喷药${crops.status === "cached" ? "（上次预报）" : ""} ${spray ? `${clockLabel(spray.start)}–${spray.end.slice(11, 16)}` : "48 小时内暂无"}`}</span><CaretRight size={13} />
       </button>
       <button type="button" className={`risk-chip ${pest?.level === "高" ? "risk-chip-high" : ""}`} onClick={onCrops}
         title="病虫气象适宜度（温湿度阈值法模型）">
@@ -411,7 +424,7 @@ function AgroPanel({ agro, crops, onOpen, onCrops }) {
       </button>
     </div>
     <button type="button" className={`agro-advice ${irrigate ? "agro-advice-irrigate" : ""}`} onClick={onOpen} title="查看蒸散与灌溉决策详情">
-      {!balance ? (agro ? "本月无灌溉参考作物" : "水分平衡数据获取中") : irrigate ? `${balance.name}参考补水 ${number(balance.irrigationRefMm, 1)} mm`
+      {!balance ? noBalance : irrigate ? `${balance.name}参考补水 ${number(balance.irrigationRefMm, 1)} mm`
         : "近 10 日降雨充足，暂不需要灌溉"}
     </button>
     <button type="button" className="primary-button" onClick={onCrops}>作物农事决策</button>
@@ -445,10 +458,12 @@ function briefingItems(alerts, agro, profile, crops) {
     items.push({ key: "soil", view: { type: "soil" }, text: `墒情：${monthDay(latest.date)} ${uniform
       ? `各层均${grades[0]}` : profile.layers.map(({ label }, index) => `${label} ${grades[index]}`).join("、")}` });
   }
-  const spray = crops?.sprayWindows?.[0];
-  if (crops) {
+  const sprayWindows = upcomingSpray(crops);
+  const spray = sprayWindows[0];
+  // 作物决策没取到时不播报喷药结论。
+  if (hasData(crops)) {
     items.push({ key: "spray", view: { type: "crops" }, text: spray
-      ? `喷药：最近适宜时段 ${clockLabel(spray.start)}–${spray.end.slice(11, 16)}`
+      ? `喷药${crops.status === "cached" ? "（上次预报）" : ""}：最近适宜时段 ${clockLabel(spray.start)}–${spray.end.slice(11, 16)}`
       : "喷药：未来 48 小时昼间无适宜时段" });
   }
   const pestHot = crops?.pests?.find(({ seasonal, level }) => seasonal && level === "高");
@@ -749,7 +764,8 @@ function AgroDetails({ agro, weather, onReplay, onWater, onCrops }) {
 
 // 作物农事决策详情：生育期农事、喷药作业窗口、病虫气象适宜度、冬种积温。
 function CropsDetails({ crops, onLamp, onAgro }) {
-  const { stages = [], sprayWindows = [], pests = [], pestWindow, gdd, method } = crops ?? {};
+  const { stages = [], pests = [], pestWindow, gdd, method } = crops ?? {};
+  const sprayWindows = upcomingSpray(crops);
   const month = new Intl.DateTimeFormat("zh-CN", { timeZone: shanghai, month: "long" }).format(new Date());
   return <>
     <h3 className="detail-heading">当季作物与农事要点（{month}）</h3>
@@ -1094,16 +1110,16 @@ function FourQuads({ profile, ndvi, alerts, crops, onOpen }) {
   return <div className="four-quads" aria-label="四情监测">
     <button type="button" onClick={() => onOpen("soil")} title="查看土壤墒情">
       <span>墒情</span>
-      <small>{latest ? gradeOf(latest.grade.root)?.label ?? "—" : "获取中"}</small>
+      <small>{latest ? gradeOf(latest.grade.root)?.label ?? "—" : pendingText(profile)}</small>
     </button>
     <button type="button" onClick={() => onOpen("ndvi")} title="查看卫星苗情时序">
       <span>苗情</span>
       {last ? <small>{number(last.ndvi?.overall, 2)}{TrendIcon && <TrendIcon size={13} className={trend >= 0 ? "trend-up" : "trend-down"} />}</small>
-        : <small>待更新</small>}
+        : <small>{ndvi?.status === "unavailable" ? "暂不可用" : "待更新"}</small>}
     </button>
     <button type="button" className={density === "高" ? "quad-alert" : ""} onClick={() => onOpen("pest")} title="查看虫情灯诱时序与防治窗口">
       <span>虫情</span>
-      <small>{lampTop ? `${lampTop.name}·${density}` : crops ? "识别中" : "获取中"}</small>
+      <small>{lampTop ? `${lampTop.name}·${density}` : crops?.status === "unavailable" ? "暂不可用" : crops ? "识别中" : "获取中"}</small>
     </button>
     <button type="button" onClick={() => onOpen("risk")} title="查看气象预警">
       <span>灾情</span>
@@ -1286,7 +1302,8 @@ function DailyReport({ observations, profile, agro, alerts, risk, crops, printin
   const balances = (agro?.balances ?? []).filter(({ irrigable }) => irrigable);
   const official = alerts?.alerts ?? [];
   const irrigate = balance != null && balance.irrigationRefMm > 0;
-  const spray = crops?.sprayWindows?.[0];
+  const sprayWindows = upcomingSpray(crops);
+  const spray = sprayWindows[0];
   const term = solarTerm();
   const date = new Intl.DateTimeFormat("zh-CN", { timeZone: shanghai, dateStyle: "full" }).format(new Date());
   const layerRow = ({ id, depth, label }) => latest ? [
@@ -1340,8 +1357,8 @@ function DailyReport({ observations, profile, agro, alerts, risk, crops, printin
       {crops?.stages?.length > 0 && <section className="report-section">
         <h3>四、作物农事与病虫</h3>
         <ReportTable head={["作物", "生育期", "农事要点"]} rows={crops.stages.map(({ name, stage, focus }) => [name, stage, focus])} />
-        {crops.sprayWindows?.length > 0 && <ReportTable head={["喷药作业窗口（未来 48 小时）", "时长", "最大风速 (km/h)"]}
-          rows={crops.sprayWindows.map(({ start, end, hours, windPeak }) => [`${clockLabel(start)} – ${end.slice(11, 16)}`, `${hours} 小时`, number(windPeak, 1)])} />}
+        {sprayWindows.length > 0 && <ReportTable head={["喷药作业窗口（未来 48 小时）", "时长", "最大风速 (km/h)"]}
+          rows={sprayWindows.map(({ start, end, hours, windPeak }) => [`${clockLabel(start)} – ${end.slice(11, 16)}`, `${hours} 小时`, number(windPeak, 1)])} />}
         {crops.pests?.length > 0 && <ReportTable head={["病虫", "气象适宜度", `近 7 日适宜日数占比（${spanLabel(crops.pestWindow)}）`, "未来 48 小时适宜时数占比"]}
           rows={crops.pests.map((pest) => [pest.pest, `${pest.level ?? "—"}${pest.seasonal ? "" : "（非敏感期）"}`, `${pest.recentPct ?? "—"}%`, `${pest.forecastPct ?? "—"}%`])} />}
         {crops.lamp && <p>虫情灯诱：{spanLabel(crops.lamp)} 合计 {number(crops.lamp.total7)} 头，优势种 {crops.lamp.species[0]?.name}
@@ -1407,7 +1424,8 @@ function DataLinksBar({ sources, onOpen }) {
   const tone = { current: "正常", cached: "沿用上次结果", unavailable: "暂不可用" };
   const pending = sources.filter(({ status }) => status === "cached").length;
   const down = sources.filter(({ status }) => status === "unavailable").length;
-  const summary = down ? `${down} 项暂不可用` : pending ? `${pending} 项未更新` : sources.every(({ status }) => status === "current") ? "全部正常" : "";
+  const parts = [down && `${down} 项暂不可用`, pending && `${pending} 项未更新`].filter(Boolean);
+  const summary = parts.length ? parts.join(" · ") : sources.every(({ status }) => status === "current") ? "全部正常" : "";
   return <footer className="datalinks-bar" aria-label="数据状态">
     <span className="datalinks-label">数据状态{summary ? ` · ${summary}` : ""}</span>
     <div className="datalinks-items">

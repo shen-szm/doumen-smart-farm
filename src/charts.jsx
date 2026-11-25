@@ -105,9 +105,9 @@ export function ObservationChart({ hours = [], className }) {
   }} />;
 }
 
-export function ForecastChart({ hours = [], featured = false }) {
+export function ForecastChart({ hours = [], featured = false, empty = "暂无逐小时降雨数据" }) {
   if (!hours.some((point) => point.rain != null || point.probability != null)) {
-    return <p className="chart-empty">暂无逐小时降雨数据</p>;
+    return <p className="chart-empty">{empty}</p>;
   }
   return <Chart className={featured ? "detail-chart" : "forecast-chart"} label="未来24小时降雨量和降雨概率" option={{
     ...base,
