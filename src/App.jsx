@@ -1634,7 +1634,7 @@ export function App() {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
       else await document.documentElement.requestFullscreen();
-    } catch { setScreenError("当前预览无法开启全屏，请使用浏览器的全屏功能。"); }
+    } catch { setScreenError("浏览器没有允许进入全屏，可按 F11 或用浏览器菜单里的全屏功能。"); }
   }
 
   return <>
