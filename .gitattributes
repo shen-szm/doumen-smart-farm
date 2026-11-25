@@ -1,4 +1,5 @@
-# 发布脚本的换行约定：bash 脚本必须 LF，服务器上执行的批处理必须 CRLF
+# 发布脚本的换行约定：bash 脚本与主机公钥文件必须 LF，服务器上执行的批处理必须 CRLF
 deploy/*.sh text eol=lf
+deploy/win-hosts text eol=lf
 deploy/apply-release.bat text eol=crlf
 deploy/restart-server.bat text eol=crlf

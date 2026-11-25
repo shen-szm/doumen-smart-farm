@@ -33,6 +33,8 @@ NAME=$(printf '%s' "${TAG:-$(git rev-parse --short "$COMMIT")}" | tr '/ ' '__')
 PREVIOUS=$(git rev-parse --short live 2>/dev/null || echo 无)
 LOG=$(git rev-parse --git-dir)/doumen-releases.log
 log() { printf '%s\t%s\t%s -> %s\n' "$(date '+%F %T')" "$1" "$PREVIOUS" "$NAME" >> "$LOG"; }
+# 任何一步意外出错都记入发布日志（已自行记录的失败分支不走这里）。
+trap 'status=$?; [ "$PLAN" = 1 ] || log "失败：脚本在第 $LINENO 行中止（见上方输出）"; exit $status' ERR
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
@@ -56,39 +58,40 @@ if [ "$PLAN" = 1 ]; then
   exit 0
 fi
 
-# ---- 1. 管理通道预检（主机密钥不符会在这里停下）----
-if ! deploy/ssh-server.sh "echo CONNECTED" >/dev/null 2>"$WORK/err"; then
-  tail -n 5 "$WORK/err" >&2 | cut -c1-200
+# ---- 1. 管理通道预检（任何一层主机密钥不符都会在这里停下）----
+if ! doumen_prepare 2>"$WORK/err" || ! doumen_win "echo CONNECTED" >/dev/null 2>>"$WORK/err"; then
+  tail -n 6 "$WORK/err" >&2 | cut -c1-200
   cat >&2 <<'EOF'
-连不上服务器电脑的管理通道，或主机密钥校验未通过。本脚本不会自动信任新密钥。
-确认访问方式后修改 deploy/env.sh 再重试。
+连不上服务器电脑的管理通道，或某一层主机密钥校验未通过。本脚本不会自动信任新密钥。
+若提示 Permission denied，多半是 Windows 的 ssh-agent 里没有已解锁的 ~/.ssh/id_ed25519，
+在 PowerShell 里执行 ssh-add ~/.ssh/id_ed25519 后重试。访问方式有变则修改 deploy/env.sh。
 EOF
   log "失败：管理通道不可用"; exit 1
 fi
 
 # ---- 2. 上传发布包与服务器端脚本，并在服务器留档 ----
 echo "① 上传发布包"
-deploy/ssh-server.sh "if not exist $DOUMEN_SERVER_DIR\incoming mkdir $DOUMEN_SERVER_DIR\incoming & if not exist $DOUMEN_SERVER_DIR\releases mkdir $DOUMEN_SERVER_DIR\releases"
-deploy/scp-server.sh "$ZIP" "$DOUMEN_SERVER_DIR/incoming/$NAME.zip"
-deploy/scp-server.sh deploy/apply-release.bat deploy/restart-server.bat "$DOUMEN_SERVER_DIR/incoming/"
-deploy/ssh-server.sh "copy /y $DOUMEN_SERVER_DIR\incoming\\$NAME.zip $DOUMEN_SERVER_DIR\releases\\ >nul"
+doumen_wsl "mkdir -p $DOUMEN_WSL_DIR/incoming $DOUMEN_WSL_DIR/releases"
+doumen_scp "$ZIP" "$DOUMEN_WSL_DIR/incoming/$NAME.zip"
+doumen_scp deploy/apply-release.bat deploy/restart-server.bat "$DOUMEN_WSL_DIR/incoming/"
+doumen_win "copy /y $DOUMEN_SERVER_DIR\incoming\\$NAME.zip $DOUMEN_SERVER_DIR\releases\\ >nul"
 
 # ---- 3. 暂存目录构建，成功后切换线上产物 ----
 echo "② 构建并切换"
-if ! deploy/ssh-server.sh "$DOUMEN_SERVER_DIR\\incoming\\apply-release.bat $NAME" | tr -d '\r'; then
+if ! doumen_win "$DOUMEN_SERVER_DIR\\incoming\\apply-release.bat $NAME" | tr -d '\r'; then
   cat >&2 <<EOF
 同步或构建失败，线上产物未变。查看上方输出；依赖变更需先在服务器执行 npm ci。
 回滚到当前线上版本: bash deploy/rollback.sh $PREVIOUS
 EOF
   log "失败：同步或构建出错"; exit 1
 fi
-BUNDLE=$(deploy/ssh-server.sh "dir /b $DOUMEN_SERVER_DIR\\dist\\client\\assets\\index-*.js" | tr -d '\r' | grep -E '^index-.*\.js$' | head -1)
+BUNDLE=$(doumen_win "dir /b $DOUMEN_SERVER_DIR\\dist\\client\\assets\\index-*.js" | tr -d '\r' | grep -E '^index-.*\.js$' | head -1)
 [ -n "$BUNDLE" ] || { echo "服务器上找不到构建产物，线上可能异常。回滚: bash deploy/rollback.sh $PREVIOUS" >&2; log "失败：找不到构建产物"; exit 1; }
 
 # ---- 4. 重启（server/*.mjs 与中间件在进程启动时加载）----
 if [ "$RESTART" = 1 ]; then
   echo "③ 重启站点进程"
-  deploy/ssh-server.sh "$DOUMEN_SERVER_DIR\\incoming\\restart-server.bat" | tr -d '\r'
+  doumen_win "$DOUMEN_SERVER_DIR\\incoming\\restart-server.bat" | tr -d '\r'
 fi
 
 # ---- 5. 健康检查：经 ECS 核对线上实际提供的产物 ----
