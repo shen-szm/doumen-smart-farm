@@ -989,13 +989,21 @@ function FourQuads({ profile, ndvi, alerts, crops, onOpen }) {
   </div>;
 }
 
+// 影像编号末段是 Sentinel-2 的过境时刻（世界时），换算成北京时间显示。
+function sensingTime(tile) {
+  const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/.exec(tile ?? "");
+  if (!match) return "—";
+  const beijing = new Date(Date.UTC(+match[1], +match[2] - 1, +match[3], +match[4], +match[5]) + 8 * 3600_000);
+  return `${beijing.getUTCMonth() + 1}-${String(beijing.getUTCDate()).padStart(2, "0")} ${String(beijing.getUTCHours()).padStart(2, "0")}:${String(beijing.getUTCMinutes()).padStart(2, "0")}`;
+}
+
 function NdviDetails({ ndvi }) {
   const scenes = ndvi?.scenes ?? [];
   const last = scenes.at(-1);
   return <>
     <NdviChart scenes={scenes} featured />
     {last && <Metadata rows={[
-      ["最新一期", `${last.date} · 云量 ${number(last.cloudCover)}% · ${last.tile}`],
+      ["最新一期", `${last.date} · 云量 ${number(last.cloudCover)}% · 北京时间 ${sensingTime(last.tile)} 过境`],
       ["最新 NDVI", `大濠冲 ${number(last.ndvi?.dahao, 3)} · 小濠冲 ${number(last.ndvi?.xiaohao, 3)} · 片区 ${number(last.ndvi?.overall, 3)}`],
       ["时序长度", `${scenes.length} 景（${scenes[0].date} 至 ${last.date}，云量 < 30%）`],
       ["观测窗口", "两村各 640 m × 640 m，片区 2.6 km × 2.6 km"],
