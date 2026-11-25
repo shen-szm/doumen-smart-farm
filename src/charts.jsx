@@ -85,8 +85,9 @@ const line = (name, data, color, other) => ({
   lineStyle: { color, width: 2 }, itemStyle: { color }, ...other,
 });
 
-export function ObservationChart({ hours }) {
-  return <Chart className="detail-chart" label="斗门站逐小时气温与相对湿度" option={{
+export function ObservationChart({ hours = [], className }) {
+  if (!hours.length) return <p className="chart-empty">暂无斗门站整点记录</p>;
+  return <Chart className={className ?? "detail-chart"} label="斗门站逐小时气温与相对湿度" option={{
     ...base,
     grid: { left: 44, right: 45, top: 40, bottom: 28 },
     legend: { data: ["气温", "相对湿度"], textStyle: { color: label } },
@@ -130,9 +131,9 @@ export function ForecastChart({ hours = [], featured = false }) {
   }} />;
 }
 
-export function SoilChart({ series = [], featured = false, daily = false }) {
+export function SoilChart({ series = [], featured = false, daily = false, className }) {
   if (!series.some((point) => point.moisture != null)) return <p className="chart-empty">暂无区域墒情时序</p>;
-  return <Chart className={featured ? "detail-chart" : "soil-chart"} label="土壤体积含水量趋势" option={{
+  return <Chart className={className ?? (featured ? "detail-chart" : "soil-chart")} label="土壤体积含水量趋势" option={{
     ...base,
     grid: { left: 36, right: 9, top: 8, bottom: 23 },
     xAxis: { ...axis, type: "category", boundaryGap: false, data: daily ? series.map(({ time }) => time.slice(5, 10).replace("-", "/")) : timeNames(series),
@@ -184,10 +185,10 @@ export function RootZoneChart({ days = [], fieldCapacity = 0.30, featured = fals
 }
 
 // ERA5-Land 三层土壤剖面时序（表层 / 根区 / 深层）。
-export function SoilProfileChart({ days = [], layers = [], featured = false }) {
+export function SoilProfileChart({ days = [], layers = [], featured = false, className }) {
   const usable = days.filter(({ moisture }) => layers.some(({ id }) => Number.isFinite(moisture?.[id])));
   if (!usable.length) return <p className="chart-empty">暂无土壤剖面时序</p>;
-  return <Chart className={featured ? "detail-chart" : "soil-chart"} label="土壤剖面三层体积含水量时序" option={{
+  return <Chart className={className ?? (featured ? "detail-chart" : "soil-chart")} label="土壤剖面三层体积含水量时序" option={{
     ...base,
     animationDuration: 1500,
     animationEasing: "quadraticOut",
@@ -211,20 +212,20 @@ export function SoilProfileChart({ days = [], layers = [], featured = false }) {
 }
 
 // NASA POWER 日值：降雨柱 + FAO-56 参考蒸散 ET0 曲线（可选叠加去年同期虚线）。
-export function AgroChart({ daily = [], lastYear = [], featured = false }) {
+export function AgroChart({ daily = [], lastYear = [], featured = false, className }) {
   const usable = daily.filter(({ precip, et0 }) => precip != null || et0 != null);
   if (!usable.length) return <p className="chart-empty">暂无农业气象时序</p>;
   // 去年同期按「月-日」对齐到今年的横轴，去年缺测的日期留空。
   const lastByDate = new Map(lastYear.map(({ date, et0 }) => [date.slice(5), et0]));
   const lastSeries = usable.map(({ date }) => lastByDate.get(date.slice(5)) ?? null);
   const hasLastYear = lastSeries.some((et0) => et0 != null);
-  return <Chart className={featured ? "detail-chart" : "agro-chart"} label="日降雨量与参考蒸散量对比" option={{
+  return <Chart className={className ?? (featured ? "detail-chart" : "agro-chart")} label="日降雨量与参考蒸散量对比" option={{
     ...base,
     ...zoom(featured),
     legend: {
       top: 0, left: 32, itemWidth: 14, itemHeight: 8, icon: "roundRect",
       textStyle: { color: label, fontSize: 11 },
-      data: ["日降雨量", "参考蒸散 ET0", ...(hasLastYear ? ["去年同期 ET0"] : [])],
+      data: ["日降雨量", "参考蒸散量", ...(hasLastYear ? ["去年同期"] : [])],
     },
     grid: { left: 38, right: 36, top: 26, bottom: featured ? 48 : 24 },
     xAxis: { ...axis, type: "category", data: usable.map(({ date }) => date.slice(5, 10).replace("-", "/")),
@@ -251,14 +252,14 @@ export function AgroChart({ daily = [], lastYear = [], featured = false }) {
 }
 
 // Sentinel-2 NDVI 时序：两个村与调研片区。
-export function NdviChart({ scenes = [], featured = false }) {
+export function NdviChart({ scenes = [], featured = false, className }) {
   if (!scenes.length) return <p className="chart-empty">暂无 NDVI 时序</p>;
   const series = [
     { id: "dahao", name: "大濠冲村", color: "#7ad3d0" },
     { id: "xiaohao", name: "小濠冲村", color: "#58c98a" },
     { id: "overall", name: "调研片区", color: "#85abc7" },
   ];
-  return <Chart className={featured ? "detail-chart" : "ndvi-chart"} label="两个村与片区的 NDVI 植被指数时序" option={{
+  return <Chart className={className ?? (featured ? "detail-chart" : "ndvi-chart")} label="两个村与片区的 NDVI 植被指数时序" option={{
     ...base,
     animationDuration: 1500,
     animationEasing: "quadraticOut",
@@ -281,14 +282,14 @@ export function NdviChart({ scenes = [], featured = false }) {
 }
 
 // 虫情测报灯逐日灯诱计数：三种冬季优势种堆叠柱 + 合计折线。
-export function PestChart({ series = [], featured = false }) {
+export function PestChart({ series = [], featured = false, className }) {
   if (!series.length) return <p className="chart-empty">暂无灯诱时序</p>;
   const species = [
     { id: "dbm", name: "小菜蛾", color: gold },
     { id: "flea", name: "黄曲条跳甲", color: mint },
     { id: "aphid", name: "蚜虫", color: blue },
   ];
-  return <Chart className={featured ? "detail-chart" : "pest-chart"} label="虫情测报灯逐日灯诱计数时序" option={{
+  return <Chart className={className ?? (featured ? "detail-chart" : "pest-chart")} label="虫情测报灯逐日灯诱计数时序" option={{
     ...base,
     animationDuration: 1100,
     animationDelay: (index) => index * 6,
@@ -317,16 +318,16 @@ export function PestChart({ series = [], featured = false }) {
 }
 
 // 月度气候统计：降雨柱 + ET0 合计线 + 气温均值线（近 14 个月）。
-export function MonthlyChart({ monthly = [] }) {
+export function MonthlyChart({ monthly = [], className }) {
   const usable = monthly.filter(({ precip, et0 }) => precip != null || et0 != null);
   if (usable.length < 3) return <p className="chart-empty">暂无月度统计</p>;
-  return <Chart className="detail-chart monthly-chart" label="近 14 个月降雨量、蒸散量与气温均值" option={{
+  return <Chart className={className ?? "detail-chart monthly-chart"} label="近 14 个月降雨量、蒸散量与气温均值" option={{
     ...base,
     legend: {
       top: 0, left: 32, itemWidth: 14, itemHeight: 8, icon: "roundRect",
-      textStyle: { color: label, fontSize: 11 }, data: ["月降雨量", "ET0 合计", "气温均值"],
+      textStyle: { color: label, fontSize: 11 }, data: ["月降雨量", "参考蒸散合计", "气温均值"],
     },
-    grid: { left: 38, right: 38, top: 26, bottom: 24 },
+    grid: { left: 38, right: 42, top: 26, bottom: 24 },
     xAxis: { ...axis, type: "category", data: usable.map(({ month }) => month.slice(2).replace("-", "/")),
       axisLabel: { ...axisText, interval: Math.max(0, Math.floor(usable.length / 7) - 1) } },
     yAxis: [
@@ -368,6 +369,149 @@ export function YieldChart({ items = [], unit = "" }) {
         itemStyle: { color: [mint, "#58c98a", gold, blue][index % 4] },
       })),
       animationDelay: (index) => index * 160,
+    }],
+  }} />;
+}
+
+// ---------- 以下六张图用于页面下方的「农情分析」区 ----------
+const legendFor = (data) => ({
+  top: 0, left: 32, itemWidth: 14, itemHeight: 8, icon: "roundRect", textStyle: { color: label, fontSize: 11 }, data,
+});
+const valueText = (unit) => ({ valueFormatter: (value) => value == null ? "缺测" : `${value}${unit}` });
+const axisName = (name) => ({ name, nameTextStyle: { color: label, fontSize: 10 }, nameGap: 8 });
+const rightTemperature = {
+  ...axis, position: "right", type: "value", scale: true, splitNumber: 3, splitLine: { show: false },
+  axisLabel: { ...axisText, formatter: "{value}°" },
+};
+
+// 未来 7 日：最高 / 最低气温与降水。
+export function DailyForecastChart({ daily = [] }) {
+  const usable = daily.filter(({ minTemp, maxTemp, precipitation }) => minTemp != null || maxTemp != null || precipitation != null);
+  if (!usable.length) return <p className="chart-empty">暂无逐日预报</p>;
+  const temperature = (name, key, color) => ({
+    name, type: "line", yAxisIndex: 1, data: usable.map((day) => day[key]), symbolSize: 5,
+    lineStyle: { color, width: 2 }, itemStyle: { color }, tooltip: valueText(" °C"),
+  });
+  return <Chart className="analysis-chart" label="未来 7 日最高气温、最低气温与降水" option={{
+    ...base,
+    legend: legendFor(["降水", "最高气温", "最低气温"]),
+    grid: { left: 44, right: 40, top: 46, bottom: 24 },
+    xAxis: { ...axis, type: "category", data: usable.map(({ date }) => date.slice(5).replace("-", "/")) },
+    yAxis: [
+      { ...yAxis, ...axisName("mm"), type: "value", min: 0, splitNumber: 3 },
+      rightTemperature,
+    ],
+    series: [
+      { name: "降水", type: "bar", data: usable.map(({ precipitation }) => precipitation), barMaxWidth: 18,
+        itemStyle: { color: blue, borderRadius: [2, 2, 0, 0] }, tooltip: valueText(" mm") },
+      temperature("最高气温", "maxTemp", gold),
+      temperature("最低气温", "minTemp", mint),
+    ],
+  }} />;
+}
+
+// 近 90 日：最高 / 最低气温与太阳辐射（蒸散和光合的驱动项）。
+export function ClimateChart({ daily = [] }) {
+  const usable = daily.filter(({ tmax, tmin, srad }) => tmax != null || tmin != null || srad != null);
+  if (!usable.length) return <p className="chart-empty">暂无气温与辐射日值</p>;
+  return <Chart className="analysis-chart" label="近 90 日最高气温、最低气温与太阳辐射" option={{
+    ...base,
+    legend: legendFor(["太阳辐射", "最高气温", "最低气温"]),
+    grid: { left: 46, right: 40, top: 46, bottom: 24 },
+    xAxis: { ...axis, type: "category", data: dayNames(usable),
+      axisLabel: { ...axisText, interval: Math.max(0, Math.floor(usable.length / 7) - 1) } },
+    yAxis: [
+      { ...yAxis, ...axisName("MJ/m²"), type: "value", min: 0, splitNumber: 3 },
+      rightTemperature,
+    ],
+    series: [
+      { name: "太阳辐射", type: "bar", data: usable.map(({ srad }) => srad), barMaxWidth: 10,
+        itemStyle: { color: blue, opacity: 0.55 }, tooltip: valueText(" MJ/m²") },
+      line("最高气温", usable.map(({ tmax }) => tmax), gold, { yAxisIndex: 1, connectNulls: true, tooltip: valueText(" °C") }),
+      line("最低气温", usable.map(({ tmin }) => tmin), mint, { yAxisIndex: 1, connectNulls: true, tooltip: valueText(" °C") }),
+    ],
+  }} />;
+}
+
+// 斗门站近 24 小时风速与气压。
+export function WindPressureChart({ hours = [] }) {
+  const usable = hours.filter(({ wind, pressure }) => wind != null || pressure != null);
+  if (!usable.length) return <p className="chart-empty">暂无风速与气压记录</p>;
+  return <Chart className="analysis-chart" label="斗门站近 24 小时风速与气压" option={{
+    ...base,
+    legend: legendFor(["风速", "气压"]),
+    grid: { left: 44, right: 46, top: 46, bottom: 26 },
+    xAxis: { ...axis, type: "time", axisLabel: { ...axisText, formatter: (value) => formatTime(value, "hour") } },
+    yAxis: [
+      { ...yAxis, ...axisName("m/s"), type: "value", min: 0, splitNumber: 3 },
+      { ...axis, ...axisName("hPa"), position: "right", type: "value", scale: true, splitNumber: 3, splitLine: { show: false } },
+    ],
+    series: [
+      { name: "风速", type: "bar", data: usable.map(({ time, wind }) => [time, wind]), barMaxWidth: 10,
+        itemStyle: { color: mint, borderRadius: [2, 2, 0, 0] }, tooltip: valueText(" m/s") },
+      line("气压", usable.map(({ time, pressure }) => [time, pressure]), gold, { yAxisIndex: 1, tooltip: valueText(" hPa") }),
+    ],
+  }} />;
+}
+
+// 在田作物近 10 日水分平衡：降雨、有效降雨、需水量与灌溉参考。
+export function WaterBalanceChart({ balances = [] }) {
+  const usable = balances.filter(({ precip, etc }) => precip != null || etc != null);
+  if (!usable.length) return <p className="chart-empty">暂无水分平衡数据</p>;
+  const bars = (name, key, color) => ({
+    name, type: "bar", data: usable.map((item) => item[key]), barMaxWidth: 16, barGap: "20%",
+    itemStyle: { color, borderRadius: [2, 2, 0, 0] }, tooltip: valueText(" mm"),
+  });
+  return <Chart className="analysis-chart" label="在田作物近 10 日降雨、有效降雨、需水量与灌溉参考" option={{
+    ...base,
+    legend: legendFor(["降雨", "有效降雨", "需水量", "灌溉参考"]),
+    grid: { left: 44, right: 12, top: 46, bottom: 36 },
+    xAxis: { ...axis, type: "category", data: usable.map(({ name }) => name.replace(/（.*$/, "")),
+      axisLabel: { ...axisText, interval: 0, width: 64, overflow: "break" } },
+    yAxis: { ...yAxis, ...axisName("mm"), type: "value", min: 0, splitNumber: 3 },
+    series: [
+      bars("降雨", "precip", blue),
+      bars("有效降雨", "effectiveRain", mint),
+      bars("需水量", "etc", gold),
+      bars("灌溉参考", "irrigationRefMm", "#58c98a"),
+    ],
+  }} />;
+}
+
+// 本月农事作业构成（按作业类型计数）。
+export function OperationsChart({ byType = {} }) {
+  const rows = Object.entries(byType).filter(([, count]) => Number.isFinite(count) && count > 0).sort((a, b) => b[1] - a[1]);
+  if (!rows.length) return <p className="chart-empty">本月暂无作业记录</p>;
+  return <Chart className="analysis-chart" label="本月农事作业次数，按作业类型" option={{
+    ...base,
+    grid: { left: 8, right: 46, top: 12, bottom: 24 },
+    xAxis: { ...yAxis, type: "value", minInterval: 1, splitNumber: 3 },
+    yAxis: { ...axis, type: "category", inverse: true, data: rows.map(([name]) => name), axisLabel: { ...axisText, fontSize: 12 } },
+    series: [{
+      name: "次数", type: "bar", data: rows.map(([, count]) => count), barMaxWidth: 16,
+      itemStyle: { color: mint, borderRadius: [0, 2, 2, 0] },
+      label: { show: true, position: "right", color: label, fontSize: 11, formatter: ({ value }) => `${value} 次` },
+      tooltip: valueText(" 次"),
+    }],
+  }} />;
+}
+
+// 农业产值与同比。
+export function OutputChart({ results = [] }) {
+  const rows = results.map(([name, value, growth]) => ({ name, value: Number(value), growth })).filter(({ value }) => Number.isFinite(value));
+  if (!rows.length) return null;
+  return <Chart className="output-chart" label="农业产值与同比" option={{
+    ...base,
+    grid: { left: 8, right: 86, top: 10, bottom: 22 },
+    xAxis: { ...yAxis, type: "value", min: 0, splitNumber: 3 },
+    yAxis: { ...axis, type: "category", inverse: true, data: rows.map(({ name }) => name),
+      axisLabel: { ...axisText, fontSize: 12, width: 132, overflow: "break" } },
+    series: [{
+      name: "产值", type: "bar", data: rows.map(({ value }) => value), barMaxWidth: 18,
+      itemStyle: { color: blue, borderRadius: [0, 2, 2, 0] },
+      label: { show: true, position: "right", color: "#dfeaf2", fontSize: 11,
+        formatter: ({ dataIndex }) => `${rows[dataIndex].value} 亿元 · 同比 ${rows[dataIndex].growth}` },
+      tooltip: { valueFormatter: (value) => `${value} 亿元` },
     }],
   }} />;
 }

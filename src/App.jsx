@@ -1,12 +1,14 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowSquareOut, CaretRight, ChartLineDown, ChartLineUp, CheckCircle, Circle,
-  Cloud, CloudFog, CloudRain, CloudSun, FileText, Keyboard, MagnifyingGlassMinus,
-  MagnifyingGlassPlus, MapPin, MapTrifold, Plant, Printer, Scan, ShieldWarning,
-  Sun, VideoCamera, X,
+  Cloud, CloudFog, CloudRain, CloudSun, MagnifyingGlassMinus, MagnifyingGlassPlus, MapPin,
+  Printer, Sun, VideoCamera, X,
 } from "@phosphor-icons/react";
 import { DETAIL_IMAGERY, FieldMap, villages, PILOT_FIELD } from "./FieldMap.jsx";
-import { AgroChart, ForecastChart, MonthlyChart, NdviChart, ObservationChart, PestChart, ReplayChart, RootZoneChart, SoilChart, SoilProfileChart, YieldChart } from "./charts.jsx";
+import {
+  AgroChart, ClimateChart, DailyForecastChart, ForecastChart, MonthlyChart, NdviChart, ObservationChart, OperationsChart, OutputChart,
+  PestChart, ReplayChart, RootZoneChart, SoilChart, SoilProfileChart, WaterBalanceChart, WindPressureChart, YieldChart,
+} from "./charts.jsx";
 import {
   alertUrl, asset, formatTime, getJson, guidanceUrl, number, rainRisk, replayTime,
   shanghai, stationUrl, stormUrl, useActiveAlerts, useReading, weatherText,
@@ -15,7 +17,6 @@ import { alertTone, cropCalendar, cropStageTones, doumenStatistics, fieldImages,
 import { gradeOf, soilGradeScale } from "./grades.js";
 import { solarTerm } from "./solar.js";
 
-const overhead = asset("/media/dahaoyong-overhead.webp");
 const cameraUrl = import.meta.env.VITE_CAMERA_HLS_URL;
 const wave = (source) => source?.status === "current" ? "自动更新" : source?.status === "cached" ? "缓存快照"
   : source ? "暂不可用" : "正在获取";
@@ -237,13 +238,130 @@ function RiskPanel({ risk, alerts, history, onRisk, onAction, onArchive, onAlert
   </section>;
 }
 
-function FieldPanel({ onOpen }) {
-  return <section className="panel field-panel">
-    <PanelTitle title="田间影像" action="档案" onClick={onOpen} />
-    <button type="button" className="field-thumbnail" onClick={onOpen} aria-label="查看大濠冲村现场调研照片">
-      <img src={overhead} alt="无人机俯拍的大濠冲村农田、沟渠与田间道路" />
-    </button>
-    <div className="panel-footer"><span>大濠冲村航拍 · 2026-07-13</span><span>{fieldImages.length} 份</span></div>
+// 品牌标识：「田」字方格，一块地分成四畦。自己画的内联图形，不用图标库里的通用图标。
+function BrandMark() {
+  return <svg className="brand-mark" viewBox="0 0 28 28" width="30" height="30" aria-hidden="true">
+    <rect x="14" y="2" width="12" height="12" fill="currentColor" opacity=".28" />
+    <rect x="2" y="2" width="24" height="24" rx="3" fill="none" stroke="currentColor" strokeWidth="2.2" />
+    <path d="M14 2v24M2 14h24" stroke="currentColor" strokeWidth="2.2" />
+  </svg>;
+}
+
+const clipClock = (seconds) => `${String(Math.floor((seconds ?? 0) / 60)).padStart(2, "0")}:${String((seconds ?? 0) % 60).padStart(2, "0")}`;
+
+// 现场录像：循环、静音。浏览器只允许静音的视频自动播放，所以始终不设声音。
+function MonitorVideo({ clip }) {
+  const video = useRef(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const element = video.current;
+    if (!element) return undefined;
+    element.muted = true;
+    element.volume = 0;
+    element.play().catch(() => {});
+    return undefined;
+  }, []);
+  if (failed) return <p className="monitor-failed">录像暂时无法播放</p>;
+  return <video ref={video} className="monitor-video" src={asset(`/media/monitor/${clip.file}`)}
+    poster={clip.poster ? asset(`/media/monitor/${clip.poster}`) : undefined}
+    loop muted autoPlay playsInline preload="auto" disablePictureInPicture disableRemotePlayback
+    onError={() => setFailed(true)} />;
+}
+
+// 右栏现场监控：循环、静音播放最近一段现场录像，点「放大」看大图。
+function MonitorPanel({ clips, onOpen, onArchive }) {
+  const clip = clips?.[0];
+  return <section className="panel monitor-panel">
+    <PanelTitle title="现场监控" action="影像档案" onClick={onArchive} />
+    {clip ? <>
+      <div className="monitor-stage">
+        <MonitorVideo key={clip.date} clip={clip} />
+        <span className="monitor-tag">回放</span>
+        <span className="monitor-date">{monthDay(clip.date)}</span>
+        <button type="button" className="monitor-expand" onClick={onOpen}>放大</button>
+      </div>
+      <div className="panel-footer"><span>{clipClock(clip.duration)} · 循环 · 静音</span><span>{clip.note ?? "现场录像"}</span></div>
+    </> : <p className="detail-empty">{clips ? "暂无现场录像" : "录像加载中"}</p>}
+  </section>;
+}
+
+function MonitorDetails({ clips }) {
+  const list = clips ?? [];
+  const [index, setIndex] = useState(0);
+  const clip = list[index] ?? list[0];
+  return list.length ? <>
+    {list.length > 1 && <div className="range-tabs" role="group" aria-label="录像日期">
+      {list.map((item, order) => <button key={item.date} type="button" aria-pressed={clip?.date === item.date}
+        onClick={() => setIndex(order)}>{item.date}</button>)}
+    </div>}
+    {clip && <>
+      <div className="monitor-stage monitor-stage-large"><MonitorVideo key={clip.date} clip={clip} /><span className="monitor-tag">回放</span></div>
+      <Metadata rows={[
+        ["录像日期", clip.date],
+        ["时长", clipClock(clip.duration)],
+        ["拍摄方式", clip.note ?? "—"],
+        ["播放方式", "循环播放，无声音"],
+        ["原始文件", clip.source],
+      ]} />
+    </>}
+  </> : <p className="detail-empty">暂无现场录像</p>;
+}
+
+// 分析区的一格：滚到附近才初始化图表，首屏加载不受影响。
+function AnalysisPanel({ title, meta, action = "详情", onClick, children }) {
+  const host = useRef(null);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const element = host.current;
+    if (!element) return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      setShown(true);
+      observer.disconnect();
+    }, { rootMargin: "360px" });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return <section className="panel analysis-panel" ref={host}>
+    <PanelTitle title={title} action={onClick ? action : undefined} onClick={onClick} />
+    {meta && <p className="panel-status">{meta}</p>}
+    {shown ? children : <div className="analysis-chart" />}
+  </section>;
+}
+
+// 页面下方的「农情分析」：各路时序数据摊开成图表，数据与首屏、弹层同源。
+function AnalysisSection({ observations, weather, profile, agro, crops, ndvi, satelliteSoil, onOpen, onLedger }) {
+  const span = (days) => days?.length ? `${monthDay(days[0].date)}–${monthDay(days.at(-1).date)}` : "";
+  const chart = (props) => ({ className: "analysis-chart", ...props });
+  return <section id="analysis" className="analysis-records" aria-label="农情分析">
+    <div className="section-head"><h2>农情分析</h2>
+      <span>{agro?.dataThrough ? `农业气象日值截至 ${agro.dataThrough}` : ""}</span></div>
+    <div className="analysis-grid">
+      <AnalysisPanel title="近 24 小时气温与湿度" meta="斗门站整点实况" onClick={() => onOpen("weather")}>
+        <ObservationChart hours={observations?.history} {...chart()} /></AnalysisPanel>
+      <AnalysisPanel title="未来 7 日气温与降水" meta="逐日预报" onClick={() => onOpen("forecast")}>
+        <DailyForecastChart daily={weather?.daily} /></AnalysisPanel>
+      <AnalysisPanel title="近 24 小时风速与气压" meta="斗门站整点实况" onClick={() => onOpen("weather")}>
+        <WindPressureChart hours={observations?.history} /></AnalysisPanel>
+      <AnalysisPanel title="土壤墒情剖面" meta={`${span(profile?.days)} · 表层 / 根区 / 深层体积含水量`} onClick={() => onOpen("soil")}>
+        <SoilProfileChart days={profile?.days} layers={profile?.layers} {...chart()} /></AnalysisPanel>
+      <AnalysisPanel title="降雨与参考蒸散" meta={`${span(agro?.daily)} · 虚线为去年同期`} onClick={() => onOpen("agro")}>
+        <AgroChart daily={agro?.daily} lastYear={agro?.lastYearDaily} {...chart()} /></AnalysisPanel>
+      <AnalysisPanel title="气温与太阳辐射" meta={`${span(agro?.daily)} · 农业气象日值`} onClick={() => onOpen("agro")}>
+        <ClimateChart daily={agro?.daily} /></AnalysisPanel>
+      <AnalysisPanel title="月度气候统计" meta={`近 ${agro?.monthly?.length ?? 0} 个月 · 当月为进行中的统计`} onClick={() => onOpen("agro")}>
+        <MonthlyChart monthly={agro?.monthly} {...chart()} /></AnalysisPanel>
+      <AnalysisPanel title="在田作物水分平衡" meta="近 10 日 · 降雨 / 有效降雨 / 需水量 / 灌溉参考" onClick={() => onOpen("agro")}>
+        <WaterBalanceChart balances={agro?.balances} /></AnalysisPanel>
+      <AnalysisPanel title="卫星遥感表层墒情" meta={`${satelliteSoil?.points?.length ?? 0} 天 · 表层 1–5 cm`} onClick={() => onOpen("soil")}>
+        <SoilChart series={satelliteSoil?.points} daily {...chart()} /></AnalysisPanel>
+      <AnalysisPanel title="卫星苗情植被指数" meta="只含云量低于 30% 的影像" onClick={() => onOpen("ndvi")}>
+        <NdviChart scenes={ndvi?.scenes} {...chart()} /></AnalysisPanel>
+      <AnalysisPanel title="虫情灯诱计数" meta="近 30 日 · 柱为各虫种，折线为合计" onClick={() => onOpen("pest")}>
+        <PestChart series={crops?.lamp?.series} {...chart()} /></AnalysisPanel>
+      <AnalysisPanel title="本月农事作业构成" meta={`${crops?.operations?.month ?? ""} · 按作业类型计次`} action="台账" onClick={onLedger}>
+        <OperationsChart byType={crops?.operations?.byType} /></AnalysisPanel>
+    </div>
   </section>;
 }
 
@@ -1088,7 +1206,7 @@ function ProductionRecords({ onField, onRisk, onWater, operations }) {
     <div className="production-grid">
       <section className="panel production-stats">
         <PanelTitle title="2026 年前三季度农业统计" />
-        <ReadingTable head={["指标", "产值（亿元）", "同比"]} rows={quarterlyAgriculture.results} />
+        <OutputChart results={quarterlyAgriculture.results} />
         <Source label="斗门区统计局 · 2026-11-03" href={quarterlyAgriculture.url} />
         <hr className="detail-divider" />
         <PanelTitle title="2025 年斗门农业统计" />
@@ -1561,6 +1679,8 @@ export function App() {
   const crops = useReading("/api/crops", 900_000, "/data/crops-snapshot.json");
   const alerts = useActiveAlerts(useReading("/api/alerts", 300_000));
   const alertHistory = useReading("/api/alert-history", 600_000, "/data/alert-history-snapshot.json");
+  // 现场录像清单：由 scripts/prepare-monitor.mjs 从「现场监控」文件夹生成。
+  const monitorClips = useReading("/media/monitor/clips.json", 3_600_000);
   const [views, setViews] = useState([]);
   const [fullscreen, setFullscreen] = useState(false);
   const [screenError, setScreenError] = useState("");
@@ -1595,7 +1715,7 @@ export function App() {
     map: "卫星底图与调研点位", archive: "预警档案", alert: view?.archived ? "历史预警详情" : "生效预警详情",
     plot: PILOT_FIELD.name, links: "数据状态", help: "键盘快捷键", pest: "虫情测报灯", crops: "作物农事决策",
     report: "农情日报", briefing: "农情简报", rainfall: "斗门镇暴雨实测记录",
-    actions: "农事处置", water: "斗门区域水环境", image: view?.image?.title };
+    actions: "农事处置", water: "斗门区域水环境", image: view?.image?.title, monitor: "现场监控" };
   const dataLinks = [
     { key: "obs", label: "站点实况", role: "中国天气网 · 斗门站 101280702", status: observations?.status, time: observations?.current?.time, fetchedAt: observations?.fetchedAt, cycle: "10 分钟" },
     { key: "obs-history", label: "整点实况", role: "中央气象台 · 斗门站 59487", status: observations?.historyStatus, time: observations?.history?.at(-1)?.time, cycle: "10 分钟" },
@@ -1643,29 +1763,21 @@ export function App() {
 
   return <>
     <header className="app-header">
-      <div className="wordmark"><span className="brand-mark"><Plant size={25} weight="bold" /></span>
-        <div><strong>斗门智慧农田</strong><small>珠海 · 斗门区</small></div>
-      </div>
+      <div className="wordmark"><BrandMark /><strong>斗门智慧农田</strong></div>
       <nav className="top-nav" aria-label="大屏导航">
         <button type="button" className={!["crops", ...riskPages].includes(activePage) ? "active" : ""} onClick={() => {
           close();
           if (window.location.hash) window.history.replaceState(null, "", window.location.pathname + window.location.search);
           window.scrollTo({ top: 0 });
         }}>
-          <MapTrifold size={18} /> 农情总览
+          农情总览
         </button>
-        <button type="button" className={riskPages.includes(activePage) ? "active" : ""} onClick={() => open("risk")}><ShieldWarning size={18} /> 预警值守</button>
-        <button type="button" className={activePage === "crops" ? "active" : ""} onClick={() => open("crops")}><Plant size={18} /> 农事决策</button>
-        <button type="button" onClick={scrollToProduction}><FileText size={18} /> 生产档案</button>
+        <button type="button" className={riskPages.includes(activePage) ? "active" : ""} onClick={() => open("risk")}>预警值守</button>
+        <button type="button" className={activePage === "crops" ? "active" : ""} onClick={() => open("crops")}>农事决策</button>
+        <button type="button" onClick={scrollToProduction}>生产档案</button>
       </nav>
       <div className="header-tools"><ClockDisplay />
-        <button type="button" className="fullscreen-button shortcuts-button" onClick={() => open("help")}
-          title="键盘快捷键（按 ? 查看全部）">
-          <Keyboard size={16} />
-        </button>
-        <button type="button" className="fullscreen-button" onClick={toggleFullscreen}>
-          <Scan size={18} /> <span>{fullscreen ? "退出全屏" : "全屏"}</span>
-        </button></div>
+        <button type="button" className="fullscreen-button" onClick={toggleFullscreen}>{fullscreen ? "退出全屏" : "全屏"}</button></div>
     </header>
 
     <main className="dashboard">
@@ -1712,13 +1824,15 @@ export function App() {
             <aside className="board-column operations" aria-label="风险、现场和滴灌">
               <RiskPanel risk={risk} alerts={alerts} history={alertHistory} onRisk={() => open("risk")} onAction={() => open("actions")} onArchive={openArchive} onAlert={openAlert} />
               <AgroPanel agro={agro} crops={crops} onOpen={() => open("agro")} onCrops={() => open("crops")} />
-              <FieldPanel onOpen={() => openField("overhead")} />
+              <MonitorPanel clips={monitorClips} onOpen={() => open("monitor")} onArchive={() => openField("overhead")} />
             </aside>
           </div>
         </div>
       </div>
       <DataLinksBar sources={dataLinks} onOpen={() => open("links")} />
       <Ticker items={briefing} onJump={jumpToBriefing} onOpen={() => open("briefing")} />
+      <AnalysisSection observations={observations} weather={weather} profile={profile} agro={agro} crops={crops}
+        ndvi={ndvi} satelliteSoil={satelliteSoil} onOpen={open} onLedger={scrollToProduction} />
       <ProductionRecords onField={openField} onRisk={() => open("actions")} onWater={() => open("water")} operations={crops?.operations} />
       <footer className="app-footer">
         <span className="footer-brand">珠海斗门智慧农田监测</span>
@@ -1731,12 +1845,13 @@ export function App() {
           <button type="button" className="text-button" onClick={() => open("water")}>区域水环境 <CaretRight size={13} /></button>
           <button type="button" className="text-button" onClick={() => open("briefing")}>农情简报 <CaretRight size={13} /></button>
           <button type="button" className="text-button" onClick={() => open("links")}>数据状态 <CaretRight size={13} /></button>
+          <button type="button" className="text-button" onClick={() => open("help")}>快捷键 <CaretRight size={13} /></button>
         </span>
       </footer>
     </main>
 
     {view && <Details page={view.type} title={view.village?.name ?? titles[view.type]}
-      wide={["field", "image", "replay", "report", "weather", "forecast"].includes(view.type)} onClose={close}
+      wide={["field", "image", "replay", "report", "weather", "forecast", "monitor"].includes(view.type)} onClose={close}
       onBack={views.length > 1 ? () => setViews((previous) => previous.slice(0, -1)) : undefined}>
       {["weather", "forecast"].includes(view.type) && <WeatherDetails weather={view.type === "weather" ? observations : weather} variant={view.type} risk={risk} regional={weather} />}
       {view.type === "soil" && <SoilDetails profile={profile} satellite={satelliteSoil} onReplay={() => open("replay")} />}
@@ -1771,6 +1886,7 @@ export function App() {
       {view.type === "crops" && <CropsDetails crops={crops} onLamp={() => open("pest")} onAgro={() => open("agro")} />}
       {view.type === "briefing" && <Briefing items={briefing} />}
       {view.type === "report" && <DailyReport observations={observations} profile={profile} agro={agro} alerts={alerts} risk={risk} crops={crops} />}
+      {view.type === "monitor" && <MonitorDetails clips={monitorClips} />}
       {view.type === "help" && <ShortcutsHelp />}
       {view.type === "pest" && <PestLampDetails crops={crops} />}
       {view.type === "map" && <>

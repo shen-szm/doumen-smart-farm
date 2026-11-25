@@ -41,17 +41,13 @@ small { font-size: .83em; }
   border-bottom: 1px solid #2b4050;
 }
 .wordmark, .header-tools, .top-nav, .clock-display { display: flex; align-items: center; }
-.wordmark { gap: 13px; }
-.brand-mark {
-  display: grid; place-items: center; width: 43px; height: 43px;
-  background: #123643; border: 1px solid #377287; border-radius: 10px; color: #9ae2e0; flex: none;
-}
-.wordmark strong { display: block; font-size: 21px; letter-spacing: .05em; line-height: 1.25; }
-.wordmark small { display: block; margin-top: 3px; font-size: 12px; color: var(--muted); letter-spacing: .12em; }
-.top-nav { gap: 4px; height: 100%; }
+.wordmark { gap: 11px; }
+.brand-mark { display: block; color: var(--mint); flex: none; }
+.wordmark strong { display: block; font-size: 19px; font-weight: 700; letter-spacing: .05em; line-height: 1.25; white-space: nowrap; }
+.top-nav { gap: 2px; height: 100%; }
 .top-nav button, .top-nav a {
-  background: none; border: 0; display: flex; align-items: center; gap: 8px; position: relative;
-  padding: 0 clamp(12px, 1.3vw, 25px); height: 100%; color: var(--muted); font-size: 15px; white-space: nowrap;
+  background: none; border: 0; display: flex; align-items: center; position: relative;
+  padding: 0 clamp(14px, 1.4vw, 26px); height: 100%; color: var(--muted); font-size: 14.5px; white-space: nowrap;
 }
 .top-nav button:hover, .top-nav a:hover, .top-nav button.active { color: #a2e7e3; background: #162f3d; text-decoration: none; }
 .top-nav .active::after { content: ""; position: absolute; bottom: 0; left: 15px; right: 15px; height: 2px; background: var(--mint); }
@@ -471,12 +467,24 @@ button.level-badge:hover { filter: brightness(1.19); }
 .archive-list { display: grid; gap: 9px; margin-bottom: 14px; }
 .archive-list p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
 .detail-alert-heading { display: flex; gap: 8px; align-items: center; }
-.field-thumbnail {
-  flex: 1; min-height: 135px; position: relative; overflow: hidden; isolation: isolate;
-  display: block; width: 100%; padding: 0; border: 0; background: #1d3747; border-radius: 6px;
+/* 现场监控：录像铺满面板，循环、静音；左上标「回放」，右上标日期 */
+.monitor-panel { display: flex; flex-direction: column; }
+.monitor-stage {
+  flex: 1; min-height: 150px; position: relative; overflow: hidden; isolation: isolate;
+  width: 100%; border-radius: 6px; background: #0b141c;
 }
-.field-thumbnail img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 46%; }
-.field-thumbnail:hover img { filter: brightness(1.08); }
+.monitor-video { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+.monitor-failed { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--subtle); font-size: 13px; }
+.monitor-tag, .monitor-date, .monitor-expand {
+  position: absolute; z-index: 1; padding: 2px 7px; border-radius: 3px; font-size: 12px; line-height: 1.5;
+  background: rgba(8, 16, 22, .72); color: #dfeaf2; font-variant-numeric: tabular-nums;
+}
+.monitor-tag { left: 8px; top: 8px; color: #ffd58a; }
+.monitor-tag::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #e8c95c; margin-right: 5px; vertical-align: 1px; }
+.monitor-date { right: 8px; top: 8px; }
+.monitor-expand { right: 8px; bottom: 8px; border: 1px solid rgba(190, 220, 235, .45); cursor: pointer; font: inherit; }
+.monitor-expand:hover { background: rgba(24, 48, 62, .92); color: #fff; }
+.monitor-stage-large { flex: none; min-height: 0; aspect-ratio: 16 / 9; }
 .camera-state { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 
 /* 蒸散与灌溉决策 */
@@ -643,6 +651,8 @@ body:has(.detail[open]) { overflow: hidden; }
 .briefing-list li + li { margin-top: 10px; }
 .detail-heading { font-size: 17px; margin-top: 20px; }
 .detail-photo img, .detail video { display: block; width: 100%; max-height: 50vh; object-fit: contain; border-radius: 6px; }
+/* 现场录像不受上面直播画面的高度限制：铺满 16:9 的画面框 */
+.detail .monitor-video { max-height: none; height: 100%; object-fit: cover; border-radius: 0; }
 .detail-photo figcaption { margin-top: 7px; color: var(--muted); font-size: 12px; }
 .detail .empty-device { display: flex; align-items: center; gap: 8px; border: 1px dashed #577083; padding: 12px; margin-top: 18px; border-radius: 5px; }
 .detail .dropdown { display: block; }
@@ -704,6 +714,15 @@ body:has(.detail[open]) { overflow: hidden; }
 .gallery-grid img { width: 100%; aspect-ratio: 1.75; object-fit: cover; border-radius: 3px; }
 .gallery-grid span { font-size: 12px; padding: 0 2px 3px; }
 .production-records { min-width: 0; margin-top: 16px; scroll-margin-top: 78px; }
+/* 页面下方的农情分析：三列图表，滚到附近才初始化 */
+.analysis-records { min-width: 0; margin-top: 16px; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.section-head h2 { font-size: 17px; font-weight: 650; letter-spacing: .02em; }
+.section-head span { color: var(--muted); font-size: 12.5px; }
+.analysis-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.analysis-panel { padding: 14px 16px 12px; }
+.analysis-chart { height: 236px; }
+.output-chart { height: 168px; margin: 4px 0 8px; }
 .crop-calendar-panel { padding: 17px; margin-bottom: 15px; }
 .calendar-scroll { overflow-x: auto; overscroll-behavior-inline: contain; }
 .calendar-table { width: 100%; min-width: 810px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 12px; }
@@ -766,7 +785,7 @@ body:has(.detail[open]) { overflow: hidden; }
   .soil-panel .layer-row { padding-block: 0; }
   .forecast-summary { margin-bottom: 5px; }
   .grade-scale { padding-top: 4px; }
-  .field-thumbnail { min-height: 104px; }
+  .monitor-stage { min-height: 104px; }
   .map-stage { min-height: 300px; }
   .agro-core { gap: 9px; margin-bottom: 7px; }
   .agro-advice { padding: 7px 10px; margin-bottom: 6px; }
@@ -781,6 +800,7 @@ body:has(.detail[open]) { overflow: hidden; }
   .clock-display > span { display: none; }
   .board-grid { grid-template-columns: minmax(258px, .95fr) minmax(0, 2.1fr) minmax(255px, .95fr); gap: 12px; }
   .board-column { gap: 11px; }
+  .analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 1060px) {
   .app-header { grid-template-columns: 1fr auto; min-height: 70px; }
@@ -807,12 +827,10 @@ body:has(.detail[open]) { overflow: hidden; }
 }
 @media (max-width: 630px) {
   .app-header, .dashboard { padding-inline: 12px; }
-  .top-nav button, .top-nav a { padding-inline: 7px; font-size: 12px; gap: 4px; }
-  .top-nav button svg, .top-nav a svg { display: none; }
-  .wordmark { gap: 7px; }
+  .top-nav button, .top-nav a { padding-inline: 9px; font-size: 12.5px; }
+  .wordmark { gap: 8px; }
   .wordmark strong { font-size: 17px; }
-  .brand-mark { width: 34px; height: 34px; }
-  .brand-mark svg { width: 19px; }
+  .brand-mark { width: 26px; height: 26px; }
   .clock-display { display: none; }
   .fullscreen-button { padding: 6px 8px; font-size: 13px; }
   .dashboard-head { min-height: 0; flex-wrap: wrap; }
@@ -845,6 +863,8 @@ body:has(.detail[open]) { overflow: hidden; }
   .ticker-track > span { font-size: 12px; }
   .footer-brand { display: none; }
   .production-grid { grid-template-columns: 1fr; }
+  .analysis-grid { grid-template-columns: minmax(0, 1fr); }
+  .analysis-chart { height: 214px; }
   .map-credit { display: inline-block; max-width: 87%; }
   .detail { --dialog-inset: 10px; }
   .detail-header { gap: 8px; }
