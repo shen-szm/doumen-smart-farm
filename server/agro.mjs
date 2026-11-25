@@ -237,21 +237,22 @@ export function normalizeAgro(payload, fetchedAt, radiation = null) {
   const et0Days = daily.filter(({ et0, precip }) => et0 !== null && precip !== null);
   if (et0Days.length < 30) throw new Error('NASA POWER record is too short');
 
-  // 同期同比：以当日向前 30 天为窗口，取去年同日期对照。
+  // 去年同日期对照：整段窗口逐日给出（供时序图叠加），同比统计只取最近 30 天。
   const lastYearKey = (date) => `${Number(date.slice(0, 4)) - 1}${date.slice(4)}`;
   const fullByDate = new Map(dailyFull.map((day) => [day.date, day]));
-  const lastYearDaily = et0Days.slice(-30).map((day) => {
+  const lastYearDaily = et0Days.map((day) => {
     const matched = fullByDate.get(lastYearKey(day.date));
     return { date: lastYearKey(day.date), precip: matched?.precip ?? null, et0: matched?.et0 ?? null };
   });
-  const pairs = et0Days.slice(-30).map((day, index) => ({ now: day, last: lastYearDaily[index] }))
+  const lastYear30 = lastYearDaily.slice(-30);
+  const pairs = et0Days.slice(-30).map((day, index) => ({ now: day, last: lastYear30[index] }))
     .filter(({ now, last }) => now.et0 != null && last.et0 != null);
   const sumBy = (list, key) => list.reduce((total, day) => total + (day[key] ?? 0), 0);
   const comparison = pairs.length >= 20 ? (() => {
     const precip30 = sumBy(et0Days.slice(-30), 'precip');
-    const precipLY = sumBy(lastYearDaily, 'precip');
+    const precipLY = sumBy(lastYear30, 'precip');
     const et0Mean = sumBy(et0Days.slice(-30), 'et0') / 30;
-    const et0MeanLY = sumBy(lastYearDaily, 'et0') / pairs.length;
+    const et0MeanLY = sumBy(lastYear30, 'et0') / pairs.length;
     const pct = (value, base) => base > 0 ? Number(((value - base) / base * 100).toFixed(0)) : null;
     return {
       windowDays: 30,

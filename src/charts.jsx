@@ -214,7 +214,10 @@ export function SoilProfileChart({ days = [], layers = [], featured = false }) {
 export function AgroChart({ daily = [], lastYear = [], featured = false }) {
   const usable = daily.filter(({ precip, et0 }) => precip != null || et0 != null);
   if (!usable.length) return <p className="chart-empty">暂无农业气象时序</p>;
-  const hasLastYear = lastYear.length === usable.length && lastYear.some(({ et0 }) => et0 != null);
+  // 去年同期按「月-日」对齐到今年的横轴，去年缺测的日期留空。
+  const lastByDate = new Map(lastYear.map(({ date, et0 }) => [date.slice(5), et0]));
+  const lastSeries = usable.map(({ date }) => lastByDate.get(date.slice(5)) ?? null);
+  const hasLastYear = lastSeries.some((et0) => et0 != null);
   return <Chart className={featured ? "detail-chart" : "agro-chart"} label="日降雨量与参考蒸散量对比" option={{
     ...base,
     ...zoom(featured),
@@ -239,7 +242,7 @@ export function AgroChart({ daily = [], lastYear = [], featured = false }) {
         connectNulls: true, animationDuration: 1600, animationEasing: "quadraticOut",
         tooltip: { valueFormatter: (v) => v == null ? "缺测" : `${v} mm/d` } },
       ...(hasLastYear ? [{
-        name: "去年同期 ET0", type: "line", yAxisIndex: 1, data: lastYear.map(({ et0 }) => et0),
+        name: "去年同期 ET0", type: "line", yAxisIndex: 1, data: lastSeries,
         showSymbol: false, lineStyle: { color: "#b59ad433", width: 1.6, type: "dashed" },
         itemStyle: { color: "#b59ad4" }, connectNulls: true, silent: true,
       }] : []),
