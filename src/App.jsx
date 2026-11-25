@@ -250,22 +250,27 @@ function BrandMark() {
 const clipClock = (seconds) => `${String(Math.floor((seconds ?? 0) / 60)).padStart(2, "0")}:${String((seconds ?? 0) % 60).padStart(2, "0")}`;
 
 // 现场录像：循环、静音。浏览器只允许静音的视频自动播放，所以始终不设声音。
+// 个别浏览器或省电模式会拦下自动播放，这时给出「点击播放」，由使用者点一下开始。
 function MonitorVideo({ clip }) {
   const video = useRef(null);
   const [failed, setFailed] = useState(false);
-  useEffect(() => {
+  const [blocked, setBlocked] = useState(false);
+  const start = () => {
     const element = video.current;
-    if (!element) return undefined;
+    if (!element) return;
     element.muted = true;
     element.volume = 0;
-    element.play().catch(() => {});
-    return undefined;
-  }, []);
+    element.play().then(() => setBlocked(false)).catch(() => setBlocked(true));
+  };
+  useEffect(() => { start(); }, []);
   if (failed) return <p className="monitor-failed">录像暂时无法播放</p>;
-  return <video ref={video} className="monitor-video" src={asset(`/media/monitor/${clip.file}`)}
-    poster={clip.poster ? asset(`/media/monitor/${clip.poster}`) : undefined}
-    loop muted autoPlay playsInline preload="auto" disablePictureInPicture disableRemotePlayback
-    onError={() => setFailed(true)} />;
+  return <>
+    <video ref={video} className="monitor-video" src={asset(`/media/monitor/${clip.file}`)}
+      poster={clip.poster ? asset(`/media/monitor/${clip.poster}`) : undefined}
+      loop muted autoPlay playsInline preload="auto" disablePictureInPicture disableRemotePlayback
+      onError={() => setFailed(true)} />
+    {blocked && <button type="button" className="monitor-play" onClick={start}>点击播放</button>}
+  </>;
 }
 
 // 右栏现场监控：循环、静音播放最近一段现场录像，点「放大」看大图。

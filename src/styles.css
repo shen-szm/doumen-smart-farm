@@ -484,6 +484,11 @@ button.level-badge:hover { filter: brightness(1.19); }
 .monitor-date { right: 8px; top: 8px; }
 .monitor-expand { right: 8px; bottom: 8px; border: 1px solid rgba(190, 220, 235, .45); cursor: pointer; font: inherit; }
 .monitor-expand:hover { background: rgba(24, 48, 62, .92); color: #fff; }
+.monitor-play {
+  position: absolute; z-index: 2; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  padding: 6px 14px; border: 1px solid rgba(190, 220, 235, .6); border-radius: 4px;
+  background: rgba(8, 16, 22, .82); color: #fff; font: inherit; font-size: 13px; cursor: pointer;
+}
 .monitor-stage-large { flex: none; min-height: 0; aspect-ratio: 16 / 9; }
 .camera-state { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 
