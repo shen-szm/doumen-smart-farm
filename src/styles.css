@@ -346,11 +346,16 @@ button.cross-row:hover span strong { color: var(--mint); }
 .aerial-reveal-caption { position: absolute; bottom: 13px; left: 13px; z-index: 501; display: flex; align-items: center; flex-wrap: wrap; gap: 3px 9px; max-width: calc(100% - 26px); padding: 4px 9px; border: 1px solid #647f8d; background: #0a1824e8; border-radius: 5px; color: #ecf9ff; font-size: 12px; }
 .aerial-reveal-caption button { color: #aee2e6; font-size: inherit; }
 .pilot-swatch { display: inline-block; width: 14px; height: 9px; border: 1px dashed #e8c95c; background: rgba(232,201,92,.25); border-radius: 2px; }
-.map-provenance { position: static; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.map-provenance { position: static; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 5px; }
 .map-provenance button { font-size: 12px; padding: 5px 8px; border-radius: 4px; }
-.map-credit { color: var(--subtle); font-size: 11.5px; line-height: 1.45; }
+/* 署名独占一行，按放大后的完整署名占位（.map-credit-reserve 看不见但占着位置），
+   放大后署名变长时地图画面不会跟着变矮 */
+.map-credit { grid-column: 1 / -1; position: relative; min-width: 0; color: var(--subtle); font-size: 11.5px; line-height: 1.45; }
+.map-credit-reserve { visibility: hidden; }
+.map-credit-text { position: absolute; top: 0; left: 0; }
 .map-view { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-.map-utility { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; padding-top: 8px; }
+/* 第一行：提示在左、按钮在右；第二行：署名。行数不随提示文字和署名的长短变化 */
+.map-utility { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 10px; padding-top: 8px; }
 .satellite-map-image { filter: saturate(.93) brightness(.98); }
 /* 高清实拍影像：略提亮，与卫星底图的观感衔接。滤镜加在整个图层而不是单块瓦片上，
    否则瓦片各自取整，放大后会出现拼缝 */
@@ -795,7 +800,6 @@ body:has(.detail[open]) { overflow: hidden; }
   .map-stage { min-height: 300px; }
   .agro-core { gap: 9px; margin-bottom: 7px; }
   .agro-advice { padding: 7px 10px; margin-bottom: 6px; }
-  .map-utility .map-hint { flex-basis: 100%; }
   .ticker-bar { height: 32px; margin-top: 9px; }
   .ticker-track > span { line-height: 32px; }
 }
@@ -871,7 +875,10 @@ body:has(.detail[open]) { overflow: hidden; }
   .production-grid { grid-template-columns: 1fr; }
   .analysis-grid { grid-template-columns: minmax(0, 1fr); }
   .analysis-chart { height: 214px; }
-  .map-credit { display: inline-block; max-width: 87%; }
+  /* 手机宽度下提示、按钮、署名各占一行 */
+  .map-utility { grid-template-columns: minmax(0, 1fr); }
+  .map-provenance { grid-column: 1; grid-row: 2; justify-content: flex-start; }
+  .map-credit { grid-row: 3; }
   .detail { --dialog-inset: 10px; }
   .detail-header { gap: 8px; }
   .detail-metrics { grid-template-columns: 1fr 1fr; }

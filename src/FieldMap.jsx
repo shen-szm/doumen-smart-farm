@@ -468,8 +468,6 @@ export function FieldMap({ onVillage, onMapInfo, onPlot, onPhoto }) {
         : mode === "satellite" ? detailActive ? "高清实拍影像 · 放大到村点可进入航拍" : "滚轮放大，查看高清实拍影像"
           : mode !== "archive" ? "拖动平移 · 滚轮缩放" : "拖动平移 · 滚轮缩放"}</p>
       <div className="map-provenance">
-        {mode === "satellite" && satellite && <span className="map-credit">
-          {detailActive && `${DETAIL_IMAGERY.credit} · `}{satellite.attribution}</span>}
         {!scene && mode === "satellite" && <button type="button" aria-pressed={showPilot} onClick={() => setShowPilot(!showPilot)}>
           {showPilot ? "隐藏试点地块" : "显示试点地块"}
         </button>}
@@ -478,6 +476,11 @@ export function FieldMap({ onVillage, onMapInfo, onPlot, onPhoto }) {
         </button>}
         <button type="button" onClick={onMapInfo}>{mode === "online" ? "天地图影像" : mode === "satellite" ? "影像来源" : mapFallback ? "卫星影像不可用 · 调研地图" : "调研地图"}</button>
       </div>
+      {mode === "satellite" && satellite && <span className="map-credit">
+        {/* 放大后署名前面会多出高清影像的一段。用完整署名占位，地图画面的高度不随署名变长而变。 */}
+        <span className="map-credit-reserve" aria-hidden="true">{DETAIL_IMAGERY.credit} · {satellite.attribution}</span>
+        <span className="map-credit-text">{detailActive && `${DETAIL_IMAGERY.credit} · `}{satellite.attribution}</span>
+      </span>}
     </div>
   </div>;
 }
