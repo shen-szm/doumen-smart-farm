@@ -13,8 +13,12 @@ const aerialPhoto = asset("/media/dahaoyong-aerial.webp");
 // 卫星底图约 20 米一像素，放大后会发虚；达到该级别后在同一位置叠入真实高清影像。
 const DETAIL_ZOOM = 13.5;
 const DETAIL_MAX_ZOOM = 16;
-// 放大到该级别、且村点靠近画面中心时，推进到无人机航拍。
+// 放大到该级别、且画面中心离村点不超过这个距离（米）时，推进到无人机航拍。
+// 用「＋」或在地图中间滚轮时村点会随放大离开画面中心，所以不按村点离画面中心的远近判断。
 const AERIAL_ZOOM = 15.25;
+const AERIAL_RANGE = 700;
+// 推进的支点离画面边缘至少留这么多像素。
+const EDGE = 24;
 const PHOTO_START = { scale: 1.18, x: 0, y: 0 };
 
 // 高清实拍影像：Esri 公共影像服务（Web Mercator，与卫星底图位置对齐）。需联网，取不到时保持卫星底图。
@@ -107,13 +111,18 @@ function bindCloseup(map, frames, motion, setScene) {
       return;
     }
     const size = map.getSize();
-    const center = size.divideBy(2);
+    const center = map.getCenter();
     const candidates = requested ? [requested] : layers;
     const nearest = candidates.flatMap((layer) => {
       if (!layer.image.complete || !layer.image.naturalWidth) return [];
+      const distance = map.distance(center, layer.position);
+      if (distance > AERIAL_RANGE) return [];
+      // 支点取村点当前的位置，已经出画时贴到画面边上。
       const point = map.latLngToContainerPoint(layer.position);
-      if (Math.abs(point.x - center.x) > size.x * .12 || Math.abs(point.y - center.y) > size.y * .12) return [];
-      return [{ layer, point, distance: point.distanceTo(center) }];
+      const anchor = L.point(
+        Math.min(Math.max(point.x, EDGE), size.x - EDGE),
+        Math.min(Math.max(point.y, EDGE), size.y - EDGE));
+      return [{ layer, point: anchor, distance }];
     }).sort((left, right) => left.distance - right.distance)[0];
     if (nearest) enter(nearest.layer, nearest.point);
   }
