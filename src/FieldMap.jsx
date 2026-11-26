@@ -348,19 +348,22 @@ export function FieldMap({ onVillage, onMapInfo, onPlot, onPhoto }) {
       });
     }
     recenter.current();
-    // 容器初始尺寸为 0 时才需要二次定位；用户后续缩放不因窗口尺寸变化被重置。
-    let pendingInitialFit = canvas.clientWidth === 0 || canvas.clientHeight === 0;
+    // 页面刚打开时各面板边加载边变尺寸。地图跟着变尺寸时画面是贴着左上角摆的，画面中心会一点一点偏走，
+    // 所以用户还没动过地图之前，每变一次尺寸就重新定位一次；动过之后窗口尺寸变化不再重置视野。
+    const inputTypes = ["wheel", "pointerdown", "touchstart", "dblclick"];
+    let touched = false;
+    const mark = () => { touched = true; };
+    for (const type of inputTypes) canvas.parentElement.addEventListener(type, mark, { passive: true, capture: true });
     const resize = new ResizeObserver(() => {
-      const needFit = pendingInitialFit;
-      pendingInitialFit = false;
       mapInstance.invalidateSize({ pan: false, animate: false });
-      if (!isOnline && needFit) recenter.current();
+      if (!isOnline && !touched) recenter.current();
     });
     resize.observe(canvas);
     return () => {
       window.clearTimeout(fallbackTimer);
       window.clearTimeout(detailRetry);
       resize.disconnect();
+      for (const type of inputTypes) canvas.parentElement.removeEventListener(type, mark, { capture: true });
       closeup.current?.stop();
       closeup.current = null;
       pilot.current = null;
