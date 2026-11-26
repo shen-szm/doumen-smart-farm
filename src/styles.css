@@ -840,7 +840,7 @@ body:has(.detail[open]) { overflow: hidden; }
   .top-nav button, .top-nav a { padding-inline: 9px; font-size: 12.5px; }
   .wordmark { gap: 8px; }
   .wordmark strong { font-size: 17px; }
-  .brand-mark { width: 26px; height: 26px; }
+  .brand-mark { width: 28px; height: 28px; }
   .clock-display { display: none; }
   .fullscreen-button { padding: 6px 8px; font-size: 13px; }
   .dashboard-head { min-height: 0; flex-wrap: wrap; }
